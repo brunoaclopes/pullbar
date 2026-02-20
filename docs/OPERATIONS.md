@@ -15,7 +15,6 @@
 Installer auto-picks `Pullbar.icns` from:
 
 1. `Assets/AppIcon/Pullbar.icns`
-2. `Pullbar.icns` (repo root)
 
 ## Troubleshooting
 

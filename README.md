@@ -92,7 +92,8 @@ Optional app icon: place `Pullbar.icns` at `Assets/AppIcon/Pullbar.icns`.
 
 - Tag push (`v*`) automatically builds and publishes a GitHub Release.
 - Manual release (`workflow_dispatch`) supports:
-  - release tag input (creates/uses tag)
+  - semantic bump dropdown: `patch` / `minor` / `major`
+  - optional explicit tag override
   - target commit/branch selection
   - release title override
   - prerelease/draft flags

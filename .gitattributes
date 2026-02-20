@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+# Treat app/icon assets as binary
+*.png binary
+*.icns binary
+*.zip binary

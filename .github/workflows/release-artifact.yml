@@ -1,0 +1,98 @@
+name: Release Artifact
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-artifact:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Bundle Pullbar.app
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_NAME="Pullbar.app"
+          EXECUTABLE="Pullbar"
+          BUILD_BIN=".build/release/$EXECUTABLE"
+          DIST_DIR="dist"
+          APP_DIR="$DIST_DIR/$APP_NAME"
+          ICON_NAME="Pullbar.icns"
+
+          mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+          cp "$BUILD_BIN" "$APP_DIR/Contents/MacOS/$EXECUTABLE"
+          chmod +x "$APP_DIR/Contents/MacOS/$EXECUTABLE"
+
+          ICON_PLIST_ENTRY=""
+          if [[ -f "Assets/AppIcon/$ICON_NAME" ]]; then
+            cp "Assets/AppIcon/$ICON_NAME" "$APP_DIR/Contents/Resources/$ICON_NAME"
+            ICON_PLIST_ENTRY=$'  <key>CFBundleIconFile</key>\n  <string>Pullbar</string>'
+          elif [[ -f "$ICON_NAME" ]]; then
+            cp "$ICON_NAME" "$APP_DIR/Contents/Resources/$ICON_NAME"
+            ICON_PLIST_ENTRY=$'  <key>CFBundleIconFile</key>\n  <string>Pullbar</string>'
+          fi
+
+          cat > "$APP_DIR/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>Pullbar</string>
+            <key>CFBundleDisplayName</key>
+            <string>Pullbar</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.pullbar.app</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${GITHUB_REF_NAME:-dev}</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleExecutable</key>
+            <string>$EXECUTABLE</string>
+          $ICON_PLIST_ENTRY
+            <key>LSMinimumSystemVersion</key>
+            <string>14.0</string>
+            <key>LSUIElement</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          codesign --force --deep --sign - --timestamp=none "$APP_DIR"
+          codesign --verify --deep --strict --verbose "$APP_DIR"
+
+      - name: Create zip artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          zip -r "Pullbar-${GITHUB_REF_NAME:-dev}.app.zip" Pullbar.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pullbar-app-${{ github.ref_name || 'dev' }}
+          path: dist/Pullbar-*.app.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Pullbar-*.app.zip
+          generate_release_notes: true

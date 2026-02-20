@@ -1,0 +1,26 @@
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode / macOS
+DerivedData/
+*.xcworkspace
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+*.xcuserdatad/
+*.xccheckout
+*.xcscmblueprint
+
+# User / OS
+.DS_Store
+*.swp
+*.swo
+
+# Generated release artifacts
+dist/
+*.app.zip
+
+# Local env overrides
+.env
+.env.*

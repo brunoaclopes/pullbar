@@ -5,6 +5,34 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.2.3)"
+        required: true
+        type: string
+      target_commitish:
+        description: "Branch or commit SHA to tag/release"
+        required: false
+        default: "main"
+        type: string
+      release_name:
+        description: "Release title (optional)"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as prerelease"
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: "Create as draft"
+        required: false
+        default: false
+        type: boolean
+      release_notes:
+        description: "Custom release notes (optional)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -19,6 +47,36 @@ jobs:
 
       - name: Build release binary
         run: swift build -c release
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+            target="${{ inputs.target_commitish }}"
+            if [[ -n "${{ inputs.release_name }}" ]]; then
+              title="${{ inputs.release_name }}"
+            else
+              title="Pullbar ${tag}"
+            fi
+            prerelease="${{ inputs.prerelease }}"
+            draft="${{ inputs.draft }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            target="${GITHUB_SHA}"
+            title="Pullbar ${tag}"
+            prerelease="false"
+            draft="false"
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "target=${target}" >> "$GITHUB_OUTPUT"
+          echo "title=${title}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+          echo "draft=${draft}" >> "$GITHUB_OUTPUT"
 
       - name: Bundle Pullbar.app
         shell: bash
@@ -56,7 +114,7 @@ jobs:
             <key>CFBundleVersion</key>
             <string>1</string>
             <key>CFBundleShortVersionString</key>
-            <string>${GITHUB_REF_NAME:-dev}</string>
+            <string>${{ steps.meta.outputs.tag }}</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleExecutable</key>
@@ -74,22 +132,62 @@ jobs:
           codesign --verify --deep --strict --verbose "$APP_DIR"
 
       - name: Create zip artifact
+        id: artifact
         shell: bash
         run: |
           set -euo pipefail
           cd dist
-          zip -r "Pullbar-${GITHUB_REF_NAME:-dev}.app.zip" Pullbar.app
+          artifact="Pullbar-${{ steps.meta.outputs.tag }}.app.zip"
+          zip -r "$artifact" Pullbar.app
+          shasum -a 256 "$artifact" > "${artifact}.sha256"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: Build release report
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > dist/RELEASE_REPORT.md <<EOF
+          # Pullbar Release Report
+
+          - Tag: \
+            `${{ steps.meta.outputs.tag }}`
+          - Target commitish: \
+            `${{ steps.meta.outputs.target }}`
+          - Commit SHA: \
+            `${{ github.sha }}`
+          - Trigger: \
+            `${{ github.event_name }}`
+          - Workflow run: \
+            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ## Artifacts
+
+          - `${{ steps.artifact.outputs.artifact }}`
+          - `${{ steps.artifact.outputs.artifact }}.sha256`
+          EOF
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Pullbar-app-${{ github.ref_name || 'dev' }}
-          path: dist/Pullbar-*.app.zip
+          name: Pullbar-release-${{ steps.meta.outputs.tag }}
+          path: |
+            dist/${{ steps.artifact.outputs.artifact }}
+            dist/${{ steps.artifact.outputs.artifact }}.sha256
+            dist/RELEASE_REPORT.md
           if-no-files-found: error
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Pullbar-*.app.zip
-          generate_release_notes: true
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ steps.meta.outputs.target }}
+          name: ${{ steps.meta.outputs.title }}
+          draft: ${{ steps.meta.outputs.draft == 'true' }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          body: ${{ inputs.release_notes }}
+          generate_release_notes: ${{ inputs.release_notes == '' || inputs.release_notes == null }}
+          files: |
+            dist/${{ steps.artifact.outputs.artifact }}
+            dist/${{ steps.artifact.outputs.artifact }}.sha256
+            dist/RELEASE_REPORT.md

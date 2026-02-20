@@ -7,9 +7,18 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v1.2.3)"
-        required: true
+        description: "Release tag override (e.g. v1.2.3). Leave empty to auto-bump."
+        required: false
         type: string
+      version_bump:
+        description: "If tag is empty, choose semantic version bump"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       target_commitish:
         description: "Branch or commit SHA to tag/release"
         required: false
@@ -39,11 +48,24 @@ permissions:
 
 jobs:
   build-release-artifact:
+    if: github.event_name != 'workflow_dispatch' || github.actor == github.repository_owner
     runs-on: macos-14
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify manual dispatch authorization
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_ACTOR}" != "${GITHUB_REPOSITORY_OWNER}" ]]; then
+            echo "Manual dispatch is restricted to the repository owner."
+            exit 1
+          fi
 
       - name: Build release binary
         run: swift build -c release
@@ -55,8 +77,42 @@ jobs:
           set -euo pipefail
 
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag }}"
             target="${{ inputs.target_commitish }}"
+
+            git fetch --tags --force
+
+            input_tag="${{ inputs.tag }}"
+            if [[ -n "$input_tag" ]]; then
+              tag="$input_tag"
+            else
+              latest_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+              if [[ -z "$latest_tag" ]]; then
+                major=0
+                minor=0
+                patch=0
+              else
+                version="${latest_tag#v}"
+                IFS='.' read -r major minor patch <<< "$version"
+              fi
+
+              case "${{ inputs.version_bump }}" in
+                major)
+                  major=$((major + 1))
+                  minor=0
+                  patch=0
+                  ;;
+                minor)
+                  minor=$((minor + 1))
+                  patch=0
+                  ;;
+                patch)
+                  patch=$((patch + 1))
+                  ;;
+              esac
+
+              tag="v${major}.${minor}.${patch}"
+            fi
+
             if [[ -n "${{ inputs.release_name }}" ]]; then
               title="${{ inputs.release_name }}"
             else
@@ -77,6 +133,25 @@ jobs:
           echo "title=${title}" >> "$GITHUB_OUTPUT"
           echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
           echo "draft=${draft}" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag (manual release)
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.meta.outputs.tag }}"
+          target="${{ steps.meta.outputs.target }}"
+
+          if git ls-remote --tags origin "refs/tags/${tag}" | grep -q "refs/tags/${tag}$"; then
+            echo "Tag ${tag} already exists on origin."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" "$target" -m "Release $tag"
+          git push origin "$tag"
 
       - name: Bundle Pullbar.app
         shell: bash

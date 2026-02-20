@@ -78,23 +78,26 @@ Optional app icon: place `Pullbar.icns` at `Assets/AppIcon/Pullbar.icns`.
 - `CONTRIBUTING.md`
 - `docs/ARCHITECTURE.md`
 - `docs/OPERATIONS.md`
-- `docs/BRANCH_PROTECTION.md`
+- `docs/RULESETS.md`
 - `SECURITY.md`
 - `SUPPORT.md`
 - `LICENSE`
 
-## GitHub Standards
+## Contributor Tooling
 
-- Issue templates: `.github/ISSUE_TEMPLATE/`
-- PR template: `.github/pull_request_template.md`
-- Code owners: `.github/CODEOWNERS`
-- Dependabot: `.github/dependabot.yml`
-- Workflows: `.github/workflows/`
+- Templates and ownership: `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`, `.github/CODEOWNERS`
+- Automation: `.github/workflows/ci.yml`, `.github/workflows/release-artifact.yml`, `.github/dependabot.yml`
 
-## CI / Release
+## Releases
 
-- CI workflow: `.github/workflows/ci.yml`
-  - validates debug/release builds and helper scripts on macOS
-- Release workflow: `.github/workflows/release-artifact.yml`
-  - on `v*` tags or manual dispatch, builds `Pullbar.app.zip`
-  - publishes/updates GitHub Release on tag pushes
+- Tag push (`v*`) automatically builds and publishes a GitHub Release.
+- Manual release (`workflow_dispatch`) supports:
+  - release tag input (creates/uses tag)
+  - target commit/branch selection
+  - release title override
+  - prerelease/draft flags
+  - custom release notes (or auto-generated notes)
+- Release output includes:
+  - `Pullbar-<tag>.app.zip`
+  - SHA-256 checksum file
+  - `RELEASE_REPORT.md` artifact

@@ -9,7 +9,7 @@ Security fixes are applied on the latest main branch and recent tagged release.
 Please do not open public issues for vulnerabilities.
 
 - Preferred: use GitHub private vulnerability reporting:
-	- https://github.com/brunoaclopes/pullbar/security/advisories/new
+  - https://github.com/brunoaclopes/pullbar/security/advisories/new
 - Include impact, reproduction steps, and any suggested mitigation.
 - Redact sensitive data (tokens, hostnames, internal URLs).
 

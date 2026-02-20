@@ -60,7 +60,7 @@ To install and immediately launch:
 
 This creates a signed `Pullbar.app`, installs it to `/Applications`, and keeps it as a menu bar app.
 
-Optional app icon: place `Pullbar.icns` at either `Assets/AppIcon/Pullbar.icns` or project root (`Pullbar.icns`), and the installer will bundle it automatically.
+Optional app icon: place `Pullbar.icns` at `Assets/AppIcon/Pullbar.icns`, and the installer/release workflow will bundle it automatically.
 
 After install, open Pullbar and enable **Launch at login** in Settings.
 

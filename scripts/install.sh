@@ -12,17 +12,7 @@ DEST_APP_PATH="$DEST_DIR/$APP_NAME"
 STAGING_DIR="$(mktemp -d)"
 STAGING_APP_PATH="$STAGING_DIR/$APP_NAME"
 ICON_FILE_NAME="Pullbar.icns"
-ICON_SOURCE_PATH=""
-
-for candidate in \
-  "$ROOT_DIR/Assets/AppIcon/$ICON_FILE_NAME" \
-  "$ROOT_DIR/$ICON_FILE_NAME"
-do
-  if [[ -f "$candidate" ]]; then
-    ICON_SOURCE_PATH="$candidate"
-    break
-  fi
-done
+ICON_SOURCE_PATH="$ROOT_DIR/Assets/AppIcon/$ICON_FILE_NAME"
 
 cleanup() {
   rm -rf "$STAGING_DIR"
@@ -61,12 +51,12 @@ cp "$BIN_PATH" "$STAGING_APP_PATH/Contents/MacOS/$APP_EXECUTABLE"
 chmod +x "$STAGING_APP_PATH/Contents/MacOS/$APP_EXECUTABLE"
 
 ICON_PLIST_ENTRY=""
-if [[ -n "$ICON_SOURCE_PATH" ]]; then
+if [[ -f "$ICON_SOURCE_PATH" ]]; then
   cp "$ICON_SOURCE_PATH" "$STAGING_APP_PATH/Contents/Resources/$ICON_FILE_NAME"
   ICON_PLIST_ENTRY=$'  <key>CFBundleIconFile</key>\n  <string>Pullbar</string>'
   echo "Using app icon: $ICON_SOURCE_PATH"
 else
-  echo "No $ICON_FILE_NAME found (checked Assets/AppIcon and project root). Using default app icon."
+  echo "No $ICON_FILE_NAME found at Assets/AppIcon. Using default app icon."
 fi
 
 cat > "$STAGING_APP_PATH/Contents/Info.plist" <<EOF

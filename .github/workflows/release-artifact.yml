@@ -40,9 +40,6 @@ jobs:
           if [[ -f "Assets/AppIcon/$ICON_NAME" ]]; then
             cp "Assets/AppIcon/$ICON_NAME" "$APP_DIR/Contents/Resources/$ICON_NAME"
             ICON_PLIST_ENTRY=$'  <key>CFBundleIconFile</key>\n  <string>Pullbar</string>'
-          elif [[ -f "$ICON_NAME" ]]; then
-            cp "$ICON_NAME" "$APP_DIR/Contents/Resources/$ICON_NAME"
-            ICON_PLIST_ENTRY=$'  <key>CFBundleIconFile</key>\n  <string>Pullbar</string>'
           fi
 
           cat > "$APP_DIR/Contents/Info.plist" <<EOF

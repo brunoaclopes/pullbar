@@ -23,9 +23,6 @@ struct SettingsView: View {
                 sectionCard("gh CLI profiles", caption: nil) {
                     ghProfilesSection
                 }
-                sectionCard("Host", caption: nil) {
-                    hostSection
-                }
                 sectionCard(
                     "Tabs",
                     caption: "Enable/disable defaults and add fully custom tabs (max \(SettingsStore.maxTabs)).",
@@ -33,17 +30,20 @@ struct SettingsView: View {
                 ) {
                     tabsSection
                 }
+                sectionCard("List", caption: nil) {
+                    listSection
+                }
                 sectionCard("Refresh", caption: nil) {
                     refreshSection
+                }
+                sectionCard("Notification hint", caption: nil) {
+                    notificationSection
                 }
                 sectionCard("App", caption: nil) {
                     appSection
                 }
-                sectionCard("List", caption: nil) {
-                    listSection
-                }
-                sectionCard("Notification hint", caption: nil) {
-                    notificationSection
+                sectionCard("Host", caption: "Advanced") {
+                    hostSection
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,6 +153,8 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.menu)
+
+            Toggle("Show PR author avatar", isOn: $settings.showAuthorAvatar)
 
             Text("Sort applies to all tabs.")
                 .font(.caption)

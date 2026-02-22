@@ -245,6 +245,9 @@ struct PullRequestItem: Identifiable, Codable, Hashable {
     let repository: String
     let title: String
     let author: String
+    let authorAvatarURL: URL?
+    let additions: Int
+    let deletions: Int
     let createdAt: Date
     let updatedAt: Date
     let url: URL
@@ -255,6 +258,81 @@ struct PullRequestItem: Identifiable, Codable, Hashable {
 
     var checksURL: URL {
         url.appending(path: "checks")
+    }
+
+    var filesURL: URL {
+        url.appending(path: "files")
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case number
+        case repository
+        case title
+        case author
+        case authorAvatarURL
+        case additions
+        case deletions
+        case createdAt
+        case updatedAt
+        case url
+        case reviewSummary
+        case checkSummary
+        case unresolvedReviewThreads
+        case reviewThreadsTotal
+    }
+
+    init(
+        id: String,
+        number: Int,
+        repository: String,
+        title: String,
+        author: String,
+        authorAvatarURL: URL? = nil,
+        additions: Int,
+        deletions: Int,
+        createdAt: Date,
+        updatedAt: Date,
+        url: URL,
+        reviewSummary: ReviewSummary,
+        checkSummary: CheckSummary,
+        unresolvedReviewThreads: Int,
+        reviewThreadsTotal: Int
+    ) {
+        self.id = id
+        self.number = number
+        self.repository = repository
+        self.title = title
+        self.author = author
+        self.authorAvatarURL = authorAvatarURL
+        self.additions = additions
+        self.deletions = deletions
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.url = url
+        self.reviewSummary = reviewSummary
+        self.checkSummary = checkSummary
+        self.unresolvedReviewThreads = unresolvedReviewThreads
+        self.reviewThreadsTotal = reviewThreadsTotal
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        number = try container.decode(Int.self, forKey: .number)
+        repository = try container.decode(String.self, forKey: .repository)
+        title = try container.decode(String.self, forKey: .title)
+        author = try container.decode(String.self, forKey: .author)
+        authorAvatarURL = try container.decodeIfPresent(URL.self, forKey: .authorAvatarURL)
+        additions = try container.decodeIfPresent(Int.self, forKey: .additions) ?? 0
+        deletions = try container.decodeIfPresent(Int.self, forKey: .deletions) ?? 0
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        url = try container.decode(URL.self, forKey: .url)
+        reviewSummary = try container.decode(ReviewSummary.self, forKey: .reviewSummary)
+        checkSummary = try container.decode(CheckSummary.self, forKey: .checkSummary)
+        unresolvedReviewThreads = try container.decode(Int.self, forKey: .unresolvedReviewThreads)
+        reviewThreadsTotal = try container.decode(Int.self, forKey: .reviewThreadsTotal)
     }
 }
 

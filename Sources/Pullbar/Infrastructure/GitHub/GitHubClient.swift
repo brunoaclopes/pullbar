@@ -75,11 +75,14 @@ struct GitHubClient {
                     number
                     title
                     url
+                                        additions
+                                        deletions
                     createdAt
                     updatedAt
                     reviewDecision
                     author {
                       login
+                                            avatarUrl
                     }
                     repository {
                       nameWithOwner
@@ -159,6 +162,9 @@ struct GitHubClient {
                 repository: node.repository.nameWithOwner,
                 title: node.title,
                 author: node.author?.login ?? "unknown",
+                authorAvatarURL: node.author?.avatarUrl.flatMap(URL.init(string:)),
+                additions: node.additions,
+                deletions: node.deletions,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 url: url,
@@ -217,6 +223,8 @@ private struct GraphQLResponse: Decodable {
         let number: Int
         let title: String
         let url: String
+        let additions: Int
+        let deletions: Int
         let createdAt: String
         let updatedAt: String
         let reviewDecision: String?
@@ -227,6 +235,7 @@ private struct GraphQLResponse: Decodable {
 
         struct Author: Decodable {
             let login: String
+            let avatarUrl: String?
         }
 
         struct Repository: Decodable {

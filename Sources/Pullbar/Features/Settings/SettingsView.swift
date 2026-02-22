@@ -10,6 +10,9 @@ struct SettingsView: View {
     @State private var ghProfiles: [GHCLIProfile] = []
     @State private var selectedGHProfileID: String = ""
     @State private var ghProfileStatus = ""
+    @State private var isShowingHighRateWarning = false
+    @State private var highRateWarningMessage = ""
+    @State private var isEstimatingApplyCost = false
 
     private let keychain = KeychainService()
     private let ghCLIImporter = GHCLIImporter()
@@ -60,6 +63,14 @@ struct SettingsView: View {
             Task {
                 await store.refreshAll(force: true, settings: settings)
             }
+        }
+        .alert("Review custom tab query", isPresented: $isShowingHighRateWarning) {
+            Button("Cancel", role: .cancel) {}
+            Button("Apply anyway") {
+                applyTabChangesNow()
+            }
+        } message: {
+            Text(highRateWarningMessage)
         }
     }
 
@@ -326,12 +337,105 @@ struct SettingsView: View {
                 .disabled(settings.tabs.count >= SettingsStore.maxTabs)
 
                 Button("Apply tab changes") {
-                    Task {
-                        await store.refreshAll(force: true, settings: settings)
-                    }
+                    applyTabChangesWithRateWarning()
+                }
+                .disabled(isEstimatingApplyCost)
+
+                if isEstimatingApplyCost {
+                    ProgressView()
+                        .controlSize(.small)
                 }
             }
         }
+    }
+
+    private func applyTabChangesWithRateWarning() {
+        guard !isEstimatingApplyCost else { return }
+
+        let broadTabs = broadCustomTabsForWarning()
+
+        isEstimatingApplyCost = true
+        Task {
+            defer { isEstimatingApplyCost = false }
+
+            do {
+                let assessment = try await store.assessRefreshCost(settings: settings)
+                if assessment.shouldWarn || !broadTabs.isEmpty {
+                    let heavyTabs = assessment.tabCosts
+                        .filter { $0.cost >= 25 }
+                        .map(\.title)
+
+                    let tabSummary = heavyTabs.isEmpty
+                        ? ""
+                        : "\nHigh-cost tabs: \(heavyTabs.joined(separator: ", "))."
+
+                    let broadSummary = broadTabs.isEmpty
+                        ? ""
+                        : "\nBroad-scope tabs: \(broadTabs.joined(separator: ", "))."
+
+                    let severityPrefix: String
+                    switch assessment.warningLevel {
+                    case .high:
+                        severityPrefix = "This apply is likely expensive."
+                    case .moderate:
+                        severityPrefix = "This apply may be expensive."
+                    case .none:
+                        severityPrefix = broadTabs.isEmpty ? "" : "This apply includes broad queries."
+                    }
+
+                    highRateWarningMessage = "\(severityPrefix) Estimated GraphQL cost is \(assessment.totalCost) points (remaining: \(assessment.remaining)/\(assessment.limit)). Review and narrow queries before applying.\(tabSummary)\(broadSummary)"
+                    isShowingHighRateWarning = true
+                    return
+                }
+
+                applyTabChangesNow()
+            } catch {
+                if !broadTabs.isEmpty {
+                    highRateWarningMessage = "Could not estimate query cost right now, and these tabs appear broad: \(broadTabs.joined(separator: ", ")). Review and narrow queries before proceeding."
+                    isShowingHighRateWarning = true
+                } else {
+                    highRateWarningMessage = "Could not estimate query cost right now. Applying may consume significant GraphQL points. Review your custom tab queries before proceeding."
+                    isShowingHighRateWarning = true
+                }
+            }
+        }
+    }
+
+    private func applyTabChangesNow() {
+        Task {
+            await store.refreshAll(force: true, settings: settings)
+        }
+    }
+
+    private func broadCustomTabsForWarning() -> [String] {
+        settings.activeTabs
+            .filter { !$0.isDefault }
+            .filter { isBroadQuery(settings.effectiveQuery(for: $0)) }
+            .map(\.title)
+    }
+
+    private func isBroadQuery(_ query: String) -> Bool {
+        let normalized = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return true }
+
+        if normalized == "is:pr archived:false" || normalized == "is:open is:pr archived:false" {
+            return true
+        }
+
+        let hasPR = normalized.contains("is:pr")
+        let hasScope = normalized.contains("repo:") || normalized.contains("org:") || normalized.contains("user:")
+        let hasActor = normalized.contains("author:") || normalized.contains("assignee:") || normalized.contains("review-requested:") || normalized.contains("involves:")
+        let hasNarrowing = normalized.contains("label:") || normalized.contains("base:") || normalized.contains("head:")
+
+        if hasPR && !hasScope && !hasActor {
+            return true
+        }
+
+        if hasPR && hasScope && !hasActor && !hasNarrowing {
+            return true
+        }
+
+        return false
     }
 
     private var notificationSection: some View {

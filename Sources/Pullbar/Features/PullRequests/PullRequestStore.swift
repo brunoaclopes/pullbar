@@ -12,6 +12,47 @@ final class PullRequestStore: ObservableObject {
     private let client = GitHubClient()
     private var autoRefreshTask: Task<Void, Never>?
     private var didLoadCache = false
+    private var loadedChecksDetailPRIds: Set<String> = []
+    private var loadedCommentsDetailPRIds: Set<String> = []
+    private var loadedReviewDetailPRIds: Set<String> = []
+    private var loadingChecksDetailPRIds: Set<String> = []
+    private var loadingCommentsDetailPRIds: Set<String> = []
+    private var loadingReviewDetailPRIds: Set<String> = []
+
+    struct RefreshCostAssessment {
+        enum WarningLevel {
+            case none
+            case moderate
+            case high
+        }
+
+        let totalCost: Int
+        let remaining: Int
+        let limit: Int
+        let tabCosts: [(title: String, cost: Int)]
+
+        var warningLevel: WarningLevel {
+            guard totalCost > 0 else { return .none }
+
+            let ratioToRemaining: Double = remaining > 0 ? Double(totalCost) / Double(remaining) : 1
+            let ratioToLimit: Double = limit > 0 ? Double(totalCost) / Double(limit) : 0
+            let maxTabCost = tabCosts.map(\.cost).max() ?? 0
+
+            if totalCost >= 120 || maxTabCost >= 60 || ratioToRemaining >= 0.15 || ratioToLimit >= 0.08 {
+                return .high
+            }
+
+            if totalCost >= 40 || maxTabCost >= 25 || ratioToRemaining >= 0.05 || ratioToLimit >= 0.03 {
+                return .moderate
+            }
+
+            return .none
+        }
+
+        var shouldWarn: Bool {
+            warningLevel != .none
+        }
+    }
 
     func configure(settings: SettingsStore) async {
         restartAutoRefresh(settings: settings)
@@ -98,6 +139,7 @@ final class PullRequestStore: ObservableObject {
             byTabId = updated
             lastUpdatedAt = Date()
             cache.save(PullRequestCache(updatedAt: lastUpdatedAt ?? Date(), byTabId: byTabId))
+            resetLoadedDetailState()
         }
 
         updateNotificationHints(settings: settings)
@@ -151,6 +193,135 @@ final class PullRequestStore: ObservableObject {
         }
     }
 
+    func assessRefreshCost(settings: SettingsStore) async throws -> RefreshCostAssessment {
+        let tabsToEvaluate = settings.activeTabs.filter { !$0.isDefault }
+        guard !tabsToEvaluate.isEmpty else {
+            return RefreshCostAssessment(totalCost: 0, remaining: 0, limit: 0, tabCosts: [])
+        }
+
+        let token = try client.resolveToken()
+
+        var totalCost = 0
+        var minRemaining = Int.max
+        var maxLimit = 0
+        var tabCosts: [(title: String, cost: Int)] = []
+
+        for tab in tabsToEvaluate {
+            let estimate = try await client.estimatePullRequestSearchCost(
+                query: settings.effectiveQuery(for: tab),
+                graphQLURL: settings.resolvedGraphQLURL,
+                token: token
+            )
+            totalCost += estimate.cost
+            minRemaining = min(minRemaining, estimate.remaining)
+            maxLimit = max(maxLimit, estimate.limit)
+            tabCosts.append((title: tab.title, cost: estimate.cost))
+        }
+
+        return RefreshCostAssessment(
+            totalCost: totalCost,
+            remaining: minRemaining == Int.max ? 0 : minRemaining,
+            limit: maxLimit,
+            tabCosts: tabCosts.sorted { $0.cost > $1.cost }
+        )
+    }
+
+    func ensureChecksDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
+        guard !loadedChecksDetailPRIds.contains(pr.id), !loadingChecksDetailPRIds.contains(pr.id) else {
+            return
+        }
+
+        loadingChecksDetailPRIds.insert(pr.id)
+        defer { loadingChecksDetailPRIds.remove(pr.id) }
+
+        do {
+            let token = try client.resolveToken()
+            let checks = try await client.fetchPullRequestChecks(
+                nodeID: pr.id,
+                graphQLURL: settings.resolvedGraphQLURL,
+                token: token
+            )
+
+            loadedChecksDetailPRIds.insert(pr.id)
+            replacePullRequest(id: pr.id) { current in
+                current.updating(checks: checks)
+            }
+        } catch {
+            if let localized = error as? LocalizedError,
+               let message = localized.errorDescription,
+               !message.isEmpty {
+                lastErrorMessage = message
+            }
+        }
+    }
+
+    func ensureCommentDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
+        guard !loadedCommentsDetailPRIds.contains(pr.id), !loadingCommentsDetailPRIds.contains(pr.id) else {
+            return
+        }
+
+        loadingCommentsDetailPRIds.insert(pr.id)
+        defer { loadingCommentsDetailPRIds.remove(pr.id) }
+
+        do {
+            let token = try client.resolveToken()
+            let threads = try await client.fetchPullRequestCommentThreads(
+                nodeID: pr.id,
+                graphQLURL: settings.resolvedGraphQLURL,
+                token: token
+            )
+
+            let unresolvedCount = threads.reduce(0) { count, thread in
+                count + (thread.status == .unresolved ? 1 : 0)
+            }
+
+            loadedCommentsDetailPRIds.insert(pr.id)
+            replacePullRequest(id: pr.id) { current in
+                current.updating(
+                    commentThreads: threads,
+                    unresolvedReviewThreads: unresolvedCount,
+                    reviewThreadsTotal: threads.count
+                )
+            }
+            updateNotificationHints(settings: settings)
+        } catch {
+            if let localized = error as? LocalizedError,
+               let message = localized.errorDescription,
+               !message.isEmpty {
+                lastErrorMessage = message
+            }
+        }
+    }
+
+    func ensureReviewDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
+        guard !loadedReviewDetailPRIds.contains(pr.id), !loadingReviewDetailPRIds.contains(pr.id) else {
+            return
+        }
+
+        loadingReviewDetailPRIds.insert(pr.id)
+        defer { loadingReviewDetailPRIds.remove(pr.id) }
+
+        do {
+            let token = try client.resolveToken()
+            let details = try await client.fetchPullRequestReviewDetails(
+                nodeID: pr.id,
+                graphQLURL: settings.resolvedGraphQLURL,
+                token: token
+            )
+
+            loadedReviewDetailPRIds.insert(pr.id)
+            replacePullRequest(id: pr.id) { current in
+                current.updating(reviewDetails: details)
+            }
+        } catch {
+            if let localized = error as? LocalizedError,
+               let message = localized.errorDescription,
+               !message.isEmpty {
+                lastErrorMessage = message
+            }
+        }
+    }
+
     private func sortPullRequests(_ items: [PullRequestItem], order: PRSortOrder) -> [PullRequestItem] {
         switch order {
         case .updatedDesc:
@@ -171,6 +342,36 @@ final class PullRequestStore: ObservableObject {
                 return tab.filters.contains { matchesFilter(pr: pr, filter: $0) }
             }
         }
+    }
+
+    private func replacePullRequest(id: String, update: (PullRequestItem) -> PullRequestItem) {
+        var replaced = false
+        var updatedByTabId = byTabId
+
+        for (tabId, items) in updatedByTabId {
+            let updatedItems = items.map { item -> PullRequestItem in
+                guard item.id == id else { return item }
+                replaced = true
+                return update(item)
+            }
+            updatedByTabId[tabId] = updatedItems
+        }
+
+        guard replaced else { return }
+
+        byTabId = updatedByTabId
+        if let lastUpdatedAt {
+            cache.save(PullRequestCache(updatedAt: lastUpdatedAt, byTabId: byTabId))
+        }
+    }
+
+    private func resetLoadedDetailState() {
+        loadedChecksDetailPRIds.removeAll()
+        loadedCommentsDetailPRIds.removeAll()
+        loadedReviewDetailPRIds.removeAll()
+        loadingChecksDetailPRIds.removeAll()
+        loadingCommentsDetailPRIds.removeAll()
+        loadingReviewDetailPRIds.removeAll()
     }
 
     private func matchesFilter(pr: PullRequestItem, filter: PRTabFilterRule) -> Bool {

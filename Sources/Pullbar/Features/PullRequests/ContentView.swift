@@ -344,8 +344,17 @@ struct ContentView: View {
 }
 
 private struct PullRequestRow: View {
+    @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var store: PullRequestStore
+
     let pr: PullRequestItem
     @State private var isHovering = false
+    @State private var isHoveringReviewTag = false
+    @State private var isShowingReviewPopover = false
+    @State private var isHoveringChecksTag = false
+    @State private var isShowingChecksPopover = false
+    @State private var isHoveringCommentsTag = false
+    @State private var isShowingCommentsPopover = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -369,45 +378,108 @@ private struct PullRequestRow: View {
                     Text("•")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                    Text("@\(pr.author)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 5) {
+                        if settings.showAuthorAvatar {
+                            authorAvatar
+                        }
+
+                        Text("@\(pr.author)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
                 }
 
                 HStack(alignment: .center, spacing: 8) {
-                    metaStatus(icon: "checkmark.seal", text: pr.reviewSummary.text, tint: reviewTint)
-                    metaStatus(icon: "checklist", text: pr.checkSummary.text, tint: checkTint)
+                    Button {
+                        if isShowingReviewPopover {
+                            isShowingReviewPopover = false
+                        } else {
+                            Task {
+                                await store.ensureReviewDetailsLoaded(for: pr, settings: settings)
+                                isShowingReviewPopover = true
+                            }
+                        }
+                    } label: {
+                        metaStatus(icon: "checkmark.seal", text: pr.reviewSummary.text, tint: reviewTint)
+                            .background(
+                                Capsule()
+                                    .fill(reviewTint.opacity(isHoveringReviewTag ? 0.08 : 0))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHoveringReviewTag = hovering
+                    }
+                    .popover(isPresented: $isShowingReviewPopover, arrowEdge: .bottom) {
+                        PullRequestReviewPopover(pr: pr)
+                    }
+                    .help("Show review details")
+                    .animation(.easeInOut(duration: 0.2), value: isHoveringReviewTag)
 
-                    if pr.unresolvedReviewThreads > 0 {
-                        metaStatus(
-                            icon: "text.bubble",
-                            text: "Open comments \(pr.unresolvedReviewThreads)",
-                            tint: threadTint
-                        )
+                    Button {
+                        if isShowingChecksPopover {
+                            isShowingChecksPopover = false
+                        } else {
+                            Task {
+                                await store.ensureChecksDetailsLoaded(for: pr, settings: settings)
+                                isShowingChecksPopover = true
+                            }
+                        }
+                    } label: {
+                        metaStatus(icon: "checklist", text: pr.checkSummary.text, tint: checkTint)
+                            .background(
+                                Capsule()
+                                    .fill(checkTint.opacity(isHoveringChecksTag ? 0.08 : 0))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHoveringChecksTag = hovering
+                    }
+                    .popover(isPresented: $isShowingChecksPopover, arrowEdge: .bottom) {
+                        PullRequestChecksPopover(pr: pr)
+                    }
+                    .help("Show checks details")
+
+                    if pr.reviewThreadsTotal > 0 {
+                        Button {
+                            if isShowingCommentsPopover {
+                                isShowingCommentsPopover = false
+                            } else {
+                                Task {
+                                    await store.ensureCommentDetailsLoaded(for: pr, settings: settings)
+                                    isShowingCommentsPopover = true
+                                }
+                            }
+                        } label: {
+                            metaStatus(
+                                icon: "text.bubble",
+                                text: pr.unresolvedReviewThreads > 0
+                                    ? "Comments \(pr.unresolvedReviewThreads)"
+                                    : "Comments",
+                                tint: threadTint
+                            )
+                            .background(
+                                Capsule()
+                                    .fill(threadTint.opacity(isHoveringCommentsTag ? 0.08 : 0))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hovering in
+                            isHoveringCommentsTag = hovering
+                        }
+                        .popover(isPresented: $isShowingCommentsPopover, arrowEdge: .bottom) {
+                            PullRequestCommentsPopover(pr: pr)
+                        }
+                        .help("Show comments details")
+                        .animation(.easeInOut(duration: 0.2), value: isHoveringCommentsTag)
                     }
 
                     Spacer()
 
-                    HStack(spacing: 5) {
-                        Button {
-                            NSWorkspace.shared.open(pr.checksURL)
-                        } label: {
-                            Image(systemName: "checklist")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Open checks")
-
-                        Button {
-                            NSWorkspace.shared.open(pr.url)
-                        } label: {
-                            Image(systemName: "arrow.up.forward.app")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Open pull request")
-                    }
-                    .foregroundStyle(actionsTint)
-                    .opacity(isHovering ? 1 : 0.45)
+                    changeCountIndicator
                 }
                 .font(.caption)
             }
@@ -485,21 +557,52 @@ private struct PullRequestRow: View {
         }
     }
 
-    private var actionsTint: Color {
-        switch pr.checkSummary {
-        case .passing:
-            return .green
-        case .failing:
-            return .red
-        case .pending:
-            return .orange
-        case .none:
-            return .primary.opacity(0.8)
-        }
+    private var threadTint: Color {
+        pr.unresolvedReviewThreads > 0 ? .orange : .secondary
     }
 
-    private var threadTint: Color {
-        .orange
+    private var changeCountIndicator: some View {
+        Button {
+            NSWorkspace.shared.open(pr.filesURL)
+        } label: {
+            HStack(spacing: 8) {
+                Text("+\(pr.additions)")
+                    .foregroundStyle(.green)
+                Text("-\(pr.deletions)")
+                    .foregroundStyle(.red)
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.06))
+            .clipShape(Capsule())
+            .opacity(isHovering ? 1 : 0.75)
+        }
+        .buttonStyle(.plain)
+        .help("Open changed files")
+    }
+
+    private var authorAvatar: some View {
+        Group {
+            if let avatarURL = pr.authorAvatarURL {
+                AsyncImage(url: avatarURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Image(systemName: "person.crop.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 14, height: 14)
+        .clipShape(Circle())
     }
 
     private var borderColor: Color {
@@ -520,5 +623,397 @@ private struct PullRequestRow: View {
         .background(tint.opacity(0.12))
         .clipShape(Capsule())
         .foregroundStyle(tint)
+    }
+}
+
+private struct PullRequestReviewPopover: View {
+    let pr: PullRequestItem
+    @State private var isHoveringOpenReviewLink = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Review")
+                .font(.subheadline.weight(.semibold))
+
+            if pr.reviewDetails.approvedBy.isEmpty,
+               pr.reviewDetails.changesRequestedBy.isEmpty,
+               pr.reviewDetails.reviewRequestedFrom.isEmpty {
+                Text("No detailed review actors available for this pull request.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !pr.reviewDetails.approvedBy.isEmpty {
+                        reviewSection(
+                            title: "Approved by",
+                            icon: "checkmark.circle.fill",
+                            tint: .green,
+                            names: pr.reviewDetails.approvedBy
+                        )
+                    }
+
+                    if !pr.reviewDetails.changesRequestedBy.isEmpty {
+                        reviewSection(
+                            title: "Changes requested by",
+                            icon: "exclamationmark.circle.fill",
+                            tint: .orange,
+                            names: pr.reviewDetails.changesRequestedBy
+                        )
+                    }
+
+                    if !pr.reviewDetails.reviewRequestedFrom.isEmpty {
+                        reviewSection(
+                            title: "Review requested from",
+                            icon: "person.crop.circle.badge.questionmark",
+                            tint: .blue,
+                            names: pr.reviewDetails.reviewRequestedFrom
+                        )
+                    }
+                }
+            }
+
+            Divider()
+
+            Text("Open review in GitHub")
+                .font(.subheadline)
+                .foregroundStyle(isHoveringOpenReviewLink ? Color.accentColor : Color.primary.opacity(0.72))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    isHoveringOpenReviewLink = hovering
+                }
+                .onTapGesture {
+                    NSWorkspace.shared.open(pr.url)
+                }
+                .help("Open review in GitHub")
+                .animation(.easeInOut(duration: 0.16), value: isHoveringOpenReviewLink)
+        }
+        .padding(12)
+        .frame(width: 300, alignment: .leading)
+    }
+
+    private func reviewSection(title: String, icon: String, tint: Color, names: [PullRequestReviewActor]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(names, id: \.self) { name in
+                    HStack(spacing: 6) {
+                        avatarView(for: name, fallbackIcon: icon, tint: tint)
+                        Text(name.login)
+                            .font(.caption)
+                    }
+                }
+            }
+            .padding(8)
+            .background(Color.primary.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func avatarView(for actor: PullRequestReviewActor, fallbackIcon: String, tint: Color) -> some View {
+        Group {
+            if let url = actor.avatarURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Image(systemName: fallbackIcon)
+                            .foregroundStyle(tint)
+                    }
+                }
+            } else {
+                Image(systemName: fallbackIcon)
+                    .foregroundStyle(tint)
+            }
+        }
+        .frame(width: 16, height: 16)
+        .clipShape(Circle())
+    }
+}
+
+private struct PullRequestCommentsPopover: View {
+    let pr: PullRequestItem
+    @State private var isHoveringOpenCommentsLink = false
+    @State private var hoveringThreadId: String?
+
+    private var unresolvedCount: Int {
+        pr.commentThreads.reduce(0) { count, thread in
+            count + (thread.status == .unresolved ? 1 : 0)
+        }
+    }
+
+    private var sortedThreads: [PullRequestCommentThread] {
+        pr.commentThreads.sorted { lhs, rhs in
+            if lhs.status != rhs.status {
+                return lhs.status == .unresolved
+            }
+            return lhs.id < rhs.id
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text("Comments")
+                    .font(.subheadline.weight(.semibold))
+
+                if unresolvedCount > 0 {
+                    Text("• \(unresolvedCount) unresolved")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            if sortedThreads.isEmpty {
+                Text("No comment threads reported for this pull request.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(sortedThreads) { thread in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Image(systemName: thread.status == .unresolved ? "text.bubble.fill" : "checkmark.bubble")
+                                    .foregroundStyle(thread.status == .unresolved ? Color.orange : Color.green)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(thread.preview)
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                        .foregroundStyle(threadTitleColor(for: thread))
+
+                                    HStack(spacing: 6) {
+                                        Text(thread.status.text)
+                                        if let author = thread.author {
+                                            Text("•")
+                                            Text("@\(author)")
+                                        }
+                                        if thread.isOutdated {
+                                            Text("•")
+                                            Text("Outdated")
+                                        }
+                                        if let path = thread.path {
+                                            Text("•")
+                                            Text(path)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
+
+                                Spacer(minLength: 6)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 5)
+                            .background(threadRowHoverBackground(for: thread))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .contentShape(Rectangle())
+                            .onHover { hovering in
+                                if hovering {
+                                    hoveringThreadId = thread.id
+                                } else if hoveringThreadId == thread.id {
+                                    hoveringThreadId = nil
+                                }
+                            }
+                            .onTapGesture {
+                                openThread(thread)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+            }
+
+            Divider()
+
+            Text("Open conversation in GitHub")
+                .font(.subheadline)
+                .foregroundStyle(isHoveringOpenCommentsLink ? Color.accentColor : Color.primary.opacity(0.72))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    isHoveringOpenCommentsLink = hovering
+                }
+                .onTapGesture {
+                    NSWorkspace.shared.open(pr.url)
+                }
+                .help("Open conversation in GitHub")
+                .animation(.easeInOut(duration: 0.16), value: isHoveringOpenCommentsLink)
+        }
+        .padding(12)
+        .frame(width: 320, alignment: .leading)
+    }
+
+    private func openThread(_ thread: PullRequestCommentThread) {
+        if let url = thread.url {
+            NSWorkspace.shared.open(url)
+            return
+        }
+
+        NSWorkspace.shared.open(pr.url)
+    }
+
+    private func threadTitleColor(for thread: PullRequestCommentThread) -> Color {
+        guard thread.url != nil else {
+            return .primary
+        }
+
+        return hoveringThreadId == thread.id ? Color.primary.opacity(0.95) : Color.primary.opacity(0.88)
+    }
+
+    private func threadRowHoverBackground(for thread: PullRequestCommentThread) -> Color {
+        guard thread.url != nil, hoveringThreadId == thread.id else {
+            return .clear
+        }
+
+        return Color.primary.opacity(0.06)
+    }
+}
+
+private struct PullRequestChecksPopover: View {
+    let pr: PullRequestItem
+    @State private var isHoveringOpenChecksLink = false
+    @State private var hoveringCheckId: String?
+
+    private var groupedChecks: [(category: String, checks: [PullRequestCheck])] {
+        let groups = Dictionary(grouping: pr.checks) { $0.category }
+        return groups
+            .map { category, checks in
+                (category, checks.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending })
+            }
+            .sorted { $0.category.localizedCaseInsensitiveCompare($1.category) == .orderedAscending }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Checks")
+                .font(.subheadline.weight(.semibold))
+
+            if groupedChecks.isEmpty {
+                Text("No checks reported for this pull request.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(groupedChecks, id: \.category) { group in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(group.category)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(group.checks) { check in
+                                        HStack(spacing: 8) {
+                                            Image(systemName: icon(for: check.status))
+                                                .foregroundStyle(color(for: check.status))
+                                            Text(check.name)
+                                                .font(.caption)
+                                                .lineLimit(1)
+                                                .foregroundStyle(checkTitleColor(for: check))
+                                            Spacer(minLength: 8)
+                                            Text(check.status.text)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(checkRowHoverBackground(for: check))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                        .contentShape(Rectangle())
+                                        .onHover { hovering in
+                                            if hovering {
+                                                hoveringCheckId = check.id
+                                            } else if hoveringCheckId == check.id {
+                                                hoveringCheckId = nil
+                                            }
+                                        }
+                                        .onTapGesture {
+                                            openCheck(check)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(8)
+                            .background(Color.primary.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+            }
+
+            Divider()
+
+            Text("Open checks in GitHub")
+                .font(.subheadline)
+                .foregroundStyle(isHoveringOpenChecksLink ? Color.accentColor : Color.primary.opacity(0.72))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    isHoveringOpenChecksLink = hovering
+                }
+                .onTapGesture {
+                    NSWorkspace.shared.open(pr.checksURL)
+                }
+                .help("Open checks in GitHub")
+                .animation(.easeInOut(duration: 0.16), value: isHoveringOpenChecksLink)
+        }
+        .padding(12)
+        .frame(width: 290, alignment: .leading)
+    }
+
+    private func icon(for status: PullRequestCheckStatus) -> String {
+        switch status {
+        case .success:
+            return "checkmark.circle.fill"
+        case .failure:
+            return "xmark.circle.fill"
+        case .pending:
+            return "clock.fill"
+        }
+    }
+
+    private func color(for status: PullRequestCheckStatus) -> Color {
+        switch status {
+        case .success:
+            return .green
+        case .failure:
+            return .red
+        case .pending:
+            return .orange
+        }
+    }
+
+    private func openCheck(_ check: PullRequestCheck) {
+        if let url = check.url {
+            NSWorkspace.shared.open(url)
+            return
+        }
+
+        NSWorkspace.shared.open(pr.checksURL)
+    }
+
+    private func checkTitleColor(for check: PullRequestCheck) -> Color {
+        guard check.url != nil else {
+            return .primary
+        }
+
+        return hoveringCheckId == check.id ? Color.primary.opacity(0.95) : Color.primary.opacity(0.88)
+    }
+
+    private func checkRowHoverBackground(for check: PullRequestCheck) -> Color {
+        guard check.url != nil, hoveringCheckId == check.id else {
+            return .clear
+        }
+
+        return Color.primary.opacity(0.06)
     }
 }

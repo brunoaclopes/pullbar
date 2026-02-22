@@ -9,6 +9,7 @@ final class SettingsStore: ObservableObject {
         static let notifyReviewRequests = "notifyReviewRequests"
         static let notifyOpenComments = "notifyOpenComments"
         static let showNotificationCount = "showNotificationCount"
+        static let showAuthorAvatar = "showAuthorAvatar"
         static let launchAtLogin = "launchAtLogin"
         static let prSortOrder = "prSortOrder"
         static let tabs = "tabs"
@@ -54,6 +55,12 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var showAuthorAvatar: Bool {
+        didSet {
+            defaults.set(showAuthorAvatar, forKey: Keys.showAuthorAvatar)
+        }
+    }
+
     @Published var launchAtLogin: Bool {
         didSet {
             defaults.set(launchAtLogin, forKey: Keys.launchAtLogin)
@@ -80,6 +87,7 @@ final class SettingsStore: ObservableObject {
         self.notifyReviewRequests = defaults.object(forKey: Keys.notifyReviewRequests) as? Bool ?? true
         self.notifyOpenComments = defaults.object(forKey: Keys.notifyOpenComments) as? Bool ?? true
         self.showNotificationCount = defaults.object(forKey: Keys.showNotificationCount) as? Bool ?? true
+        self.showAuthorAvatar = defaults.object(forKey: Keys.showAuthorAvatar) as? Bool ?? true
         self.launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         self.prSortOrder = PRSortOrder(rawValue: defaults.string(forKey: Keys.prSortOrder) ?? "") ?? .updatedDesc
         self.tabs = Self.loadTabs(from: defaults)

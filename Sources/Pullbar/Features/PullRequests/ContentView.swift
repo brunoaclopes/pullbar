@@ -344,6 +344,8 @@ struct ContentView: View {
 }
 
 private struct PullRequestRow: View {
+    @EnvironmentObject private var settings: SettingsStore
+
     let pr: PullRequestItem
     @State private var isHovering = false
 
@@ -369,6 +371,11 @@ private struct PullRequestRow: View {
                     Text("•")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+
+                    if settings.showAuthorAvatar {
+                        authorAvatar
+                    }
+
                     Text("@\(pr.author)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -389,25 +396,7 @@ private struct PullRequestRow: View {
 
                     Spacer()
 
-                    HStack(spacing: 5) {
-                        Button {
-                            NSWorkspace.shared.open(pr.checksURL)
-                        } label: {
-                            Image(systemName: "checklist")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Open checks")
-
-                        Button {
-                            NSWorkspace.shared.open(pr.url)
-                        } label: {
-                            Image(systemName: "arrow.up.forward.app")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Open pull request")
-                    }
-                    .foregroundStyle(actionsTint)
-                    .opacity(isHovering ? 1 : 0.45)
+                    changeCountIndicator
                 }
                 .font(.caption)
             }
@@ -485,21 +474,52 @@ private struct PullRequestRow: View {
         }
     }
 
-    private var actionsTint: Color {
-        switch pr.checkSummary {
-        case .passing:
-            return .green
-        case .failing:
-            return .red
-        case .pending:
-            return .orange
-        case .none:
-            return .primary.opacity(0.8)
-        }
-    }
-
     private var threadTint: Color {
         .orange
+    }
+
+    private var changeCountIndicator: some View {
+        Button {
+            NSWorkspace.shared.open(pr.filesURL)
+        } label: {
+            HStack(spacing: 8) {
+                Text("+\(pr.additions)")
+                    .foregroundStyle(.green)
+                Text("-\(pr.deletions)")
+                    .foregroundStyle(.red)
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.06))
+            .clipShape(Capsule())
+            .opacity(isHovering ? 1 : 0.75)
+        }
+        .buttonStyle(.plain)
+        .help("Open changed files")
+    }
+
+    private var authorAvatar: some View {
+        Group {
+            if let avatarURL = pr.authorAvatarURL {
+                AsyncImage(url: avatarURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Image(systemName: "person.crop.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 14, height: 14)
+        .clipShape(Circle())
     }
 
     private var borderColor: Color {

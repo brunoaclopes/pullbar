@@ -356,6 +356,7 @@ struct PullRequestCommentThread: Identifiable, Codable, Hashable {
 struct PullRequestItem: Identifiable, Codable, Hashable {
     let id: String
     let number: Int
+    let isDraft: Bool
     let repository: String
     let title: String
     let author: String
@@ -384,6 +385,7 @@ struct PullRequestItem: Identifiable, Codable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id
         case number
+        case isDraft
         case repository
         case title
         case author
@@ -405,6 +407,7 @@ struct PullRequestItem: Identifiable, Codable, Hashable {
     init(
         id: String,
         number: Int,
+        isDraft: Bool,
         repository: String,
         title: String,
         author: String,
@@ -424,6 +427,7 @@ struct PullRequestItem: Identifiable, Codable, Hashable {
     ) {
         self.id = id
         self.number = number
+        self.isDraft = isDraft
         self.repository = repository
         self.title = title
         self.author = author
@@ -446,6 +450,7 @@ struct PullRequestItem: Identifiable, Codable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         number = try container.decode(Int.self, forKey: .number)
+        isDraft = try container.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false
         repository = try container.decode(String.self, forKey: .repository)
         title = try container.decode(String.self, forKey: .title)
         author = try container.decode(String.self, forKey: .author)
@@ -476,6 +481,7 @@ extension PullRequestItem {
         PullRequestItem(
             id: id,
             number: number,
+            isDraft: isDraft,
             repository: repository,
             title: title,
             author: author,

@@ -359,9 +359,22 @@ private struct PullRequestRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
-                Text(pr.title)
-                    .font(.body.weight(.medium))
-                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(settings.showPRNumber ? "#\(pr.number) \(pr.title)" : pr.title)
+                        .font(.body.weight(.medium))
+                        .lineLimit(2)
+                        .foregroundStyle(pr.isDraft ? .secondary : .primary)
+
+                    if pr.isDraft {
+                        Text("Draft")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.primary.opacity(0.14))
+                            .clipShape(Capsule())
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 Spacer()
 
@@ -375,6 +388,7 @@ private struct PullRequestRow: View {
                     Text(pr.repository)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
                     Text("•")
                         .font(.caption)
                         .foregroundStyle(.tertiary)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var settings: SettingsStore
@@ -11,8 +12,11 @@ struct SettingsView: View {
     @State private var selectedGHProfileID: String = ""
     @State private var ghProfileStatus = ""
     @State private var isShowingHighRateWarning = false
+    @State private var highRateWarningTitle = "Review custom tab query"
     @State private var highRateWarningMessage = ""
+    @State private var highRateWarningCanApply = true
     @State private var isEstimatingApplyCost = false
+    @State private var draggedTabID: String?
 
     private let keychain = KeychainService()
     private let ghCLIImporter = GHCLIImporter()
@@ -28,8 +32,8 @@ struct SettingsView: View {
                 }
                 sectionCard(
                     "Tabs",
-                    caption: "Enable/disable defaults and add fully custom tabs (max \(SettingsStore.maxTabs)).",
-                    trailingCaption: "\(settings.tabs.count)/\(SettingsStore.maxTabs)"
+                    caption: "Enable/disable defaults and add custom tabs (max \(SettingsStore.maxTabs) enabled at once).",
+                    trailingCaption: "\(settings.activeTabs.count)/\(SettingsStore.maxTabs) enabled"
                 ) {
                     tabsSection
                 }
@@ -64,10 +68,14 @@ struct SettingsView: View {
                 await store.refreshAll(force: true, settings: settings)
             }
         }
-        .alert("Review custom tab query", isPresented: $isShowingHighRateWarning) {
-            Button("Cancel", role: .cancel) {}
-            Button("Apply anyway") {
-                applyTabChangesNow()
+        .alert(highRateWarningTitle, isPresented: $isShowingHighRateWarning) {
+            if highRateWarningCanApply {
+                Button("Cancel", role: .cancel) {}
+                Button("Apply anyway") {
+                    applyTabChangesNow()
+                }
+            } else {
+                Button("OK", role: .cancel) {}
             }
         } message: {
             Text(highRateWarningMessage)
@@ -335,7 +343,7 @@ struct SettingsView: View {
                 Button("Add custom tab") {
                     settings.addCustomTab()
                 }
-                .disabled(settings.tabs.count >= SettingsStore.maxTabs)
+                .disabled(settings.activeTabs.count >= SettingsStore.maxTabs)
 
                 Button("Apply tab changes") {
                     applyTabChangesWithRateWarning()
@@ -347,7 +355,63 @@ struct SettingsView: View {
                         .controlSize(.small)
                 }
             }
+
+            if settings.tabs.count > 1 {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Tab order")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Button("Reset tab order") {
+                            settings.resetTabOrder()
+                        }
+                        .font(.caption)
+                    }
+
+                    Text("Drag tags to reorder tabs in the PR list.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 8) {
+                            ForEach(settings.tabs) { tab in
+                                tabOrderTag(tab)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .padding(.top, 4)
+            }
         }
+    }
+
+    private func tabOrderTag(_ tab: PRTabConfig) -> some View {
+        Text(tab.title)
+            .font(.caption)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.08))
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(Color.primary.opacity(0.14), lineWidth: 1)
+            )
+            .clipShape(Capsule(style: .continuous))
+            .opacity(tab.isEnabled ? 1 : 0.55)
+            .onDrag {
+                draggedTabID = tab.id
+                return NSItemProvider(object: tab.id as NSString)
+            }
+            .onDrop(of: [UTType.text], isTargeted: nil) { _ in
+                guard let draggedTabID, draggedTabID != tab.id else { return false }
+                settings.moveTab(draggedId: draggedTabID, to: tab.id)
+                self.draggedTabID = nil
+                return true
+            }
     }
 
     private func applyTabChangesWithRateWarning() {
@@ -384,6 +448,8 @@ struct SettingsView: View {
                         severityPrefix = broadTabs.isEmpty ? "" : "This apply includes broad queries."
                     }
 
+                    highRateWarningTitle = "Review custom tab query"
+                    highRateWarningCanApply = true
                     highRateWarningMessage = "\(severityPrefix) Estimated GraphQL cost is \(assessment.totalCost) points (remaining: \(assessment.remaining)/\(assessment.limit)). Review and narrow queries before applying.\(tabSummary)\(broadSummary)"
                     isShowingHighRateWarning = true
                     return
@@ -392,9 +458,13 @@ struct SettingsView: View {
                 applyTabChangesNow()
             } catch {
                 if !broadTabs.isEmpty {
+                    highRateWarningTitle = "Review custom tab query"
+                    highRateWarningCanApply = true
                     highRateWarningMessage = "Could not estimate query cost right now, and these tabs appear broad: \(broadTabs.joined(separator: ", ")). Review and narrow queries before proceeding."
                     isShowingHighRateWarning = true
                 } else {
+                    highRateWarningTitle = "Review custom tab query"
+                    highRateWarningCanApply = true
                     highRateWarningMessage = "Could not estimate query cost right now. Applying may consume significant GraphQL points. Review your custom tab queries before proceeding."
                     isShowingHighRateWarning = true
                 }
@@ -455,6 +525,15 @@ struct SettingsView: View {
             get: { settings.tabs.first(where: { $0.id == id })?.isEnabled ?? false },
             set: { newValue in
                 guard var tab = settings.tabs.first(where: { $0.id == id }) else { return }
+
+                if newValue && !tab.isEnabled && settings.activeTabs.count >= SettingsStore.maxTabs {
+                    highRateWarningTitle = "Tab limit reached"
+                    highRateWarningCanApply = false
+                    highRateWarningMessage = "You can enable up to \(SettingsStore.maxTabs) tabs at once. Disable another tab first."
+                    isShowingHighRateWarning = true
+                    return
+                }
+
                 tab.isEnabled = newValue
                 settings.updateTab(tab)
             }

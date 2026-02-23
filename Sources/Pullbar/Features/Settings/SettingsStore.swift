@@ -123,7 +123,7 @@ final class SettingsStore: ObservableObject {
     }
 
     func addCustomTab() {
-        guard tabs.count < Self.maxTabs else { return }
+        guard activeTabs.count < Self.maxTabs else { return }
         let number = tabs.filter { !$0.isDefault }.count + 1
         tabs.append(
             PRTabConfig(
@@ -140,6 +140,58 @@ final class SettingsStore: ObservableObject {
 
     func removeCustomTab(id: String) {
         tabs.removeAll { $0.id == id && !$0.isDefault }
+    }
+
+    func moveTab(draggedId: String, to targetId: String) {
+        guard let fromIndex = tabs.firstIndex(where: { $0.id == draggedId }),
+              let toIndex = tabs.firstIndex(where: { $0.id == targetId }),
+              fromIndex != toIndex else {
+            return
+        }
+
+        let movedTab = tabs.remove(at: fromIndex)
+        tabs.insert(movedTab, at: toIndex)
+    }
+
+    func resetTabOrder() {
+        let existingBuiltinsByKind: [BuiltinTabKind: PRTabConfig] = Dictionary(
+            uniqueKeysWithValues: tabs.compactMap { tab in
+                guard let kind = tab.defaultKind ?? BuiltinTabKind(rawValue: tab.id) else { return nil }
+                return (kind, tab)
+            }
+        )
+
+        let orderedBuiltins = BuiltinTabKind.allCases.map { kind -> PRTabConfig in
+            if let existing = existingBuiltinsByKind[kind] {
+                return PRTabConfig(
+                    id: kind.rawValue,
+                    title: kind.title,
+                    query: Self.normalizeDefaultExtraQuery(existing.query, base: kind.defaultQuery),
+                    isEnabled: existing.isEnabled,
+                    defaultKind: kind,
+                    filterMatchMode: .all,
+                    filters: []
+                )
+            }
+
+            return PRTabConfig(
+                id: kind.rawValue,
+                title: kind.title,
+                query: "",
+                isEnabled: true,
+                defaultKind: kind,
+                filterMatchMode: .all,
+                filters: []
+            )
+        }
+
+        let customTabs = tabs
+            .filter { $0.defaultKind == nil && BuiltinTabKind(rawValue: $0.id) == nil }
+            .sorted { lhs, rhs in
+                lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+
+        tabs = orderedBuiltins + customTabs
     }
 
     var resolvedWebBaseURL: URL {
@@ -206,52 +258,63 @@ final class SettingsStore: ObservableObject {
     }
 
     private static func normalizeTabs(_ input: [PRTabConfig]) -> [PRTabConfig] {
-        var normalizedDefaults: [PRTabConfig] = []
+        let builtinIDs = Set(BuiltinTabKind.allCases.map(\.rawValue))
+        var seenIDs = Set<String>()
+        var seenBuiltins = Set<BuiltinTabKind>()
+        var normalized: [PRTabConfig] = []
 
-        for kind in BuiltinTabKind.allCases {
-            if let existing = input.first(where: { $0.defaultKind == kind || $0.id == kind.rawValue }) {
-                let extra = normalizeDefaultExtraQuery(existing.query, base: kind.defaultQuery)
-                normalizedDefaults.append(
+        for tab in input {
+            if let kind = tab.defaultKind ?? BuiltinTabKind(rawValue: tab.id) {
+                guard !seenBuiltins.contains(kind) else { continue }
+
+                let extra = normalizeDefaultExtraQuery(tab.query, base: kind.defaultQuery)
+                normalized.append(
                     PRTabConfig(
                         id: kind.rawValue,
                         title: kind.title,
                         query: extra,
-                        isEnabled: existing.isEnabled,
+                        isEnabled: tab.isEnabled,
                         defaultKind: kind,
                         filterMatchMode: .all,
                         filters: []
                     )
                 )
-            } else {
-                normalizedDefaults.append(
-                    PRTabConfig(
-                        id: kind.rawValue,
-                        title: kind.title,
-                        query: "",
-                        isEnabled: true,
-                        defaultKind: kind,
-                        filterMatchMode: .all,
-                        filters: []
-                    )
-                )
+                seenBuiltins.insert(kind)
+                seenIDs.insert(kind.rawValue)
+                continue
             }
+
+            guard !builtinIDs.contains(tab.id), !seenIDs.contains(tab.id) else { continue }
+
+            normalized.append(
+                PRTabConfig(
+                    id: tab.id,
+                    title: tab.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Custom" : tab.title,
+                    query: tab.query,
+                    isEnabled: tab.isEnabled,
+                    defaultKind: nil,
+                    filterMatchMode: tab.filterMatchMode,
+                    filters: sanitizeFilters(tab.filters)
+                )
+            )
+            seenIDs.insert(tab.id)
         }
 
-        let customTabs = input
-            .filter { $0.defaultKind == nil && !BuiltinTabKind.allCases.map(\.rawValue).contains($0.id) }
-            .map {
+        for kind in BuiltinTabKind.allCases where !seenBuiltins.contains(kind) {
+            normalized.append(
                 PRTabConfig(
-                    id: $0.id,
-                    title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Custom" : $0.title,
-                    query: $0.query,
-                    isEnabled: $0.isEnabled,
-                    defaultKind: nil,
-                    filterMatchMode: $0.filterMatchMode,
-                    filters: sanitizeFilters($0.filters)
+                    id: kind.rawValue,
+                    title: kind.title,
+                    query: "",
+                    isEnabled: true,
+                    defaultKind: kind,
+                    filterMatchMode: .all,
+                    filters: []
                 )
-            }
+            )
+        }
 
-        return Array((normalizedDefaults + customTabs).prefix(maxTabs))
+        return normalized
     }
 
     private static func normalizeDefaultExtraQuery(_ query: String, base: String) -> String {

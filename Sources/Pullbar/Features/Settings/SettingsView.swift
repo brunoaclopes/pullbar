@@ -166,6 +166,7 @@ struct SettingsView: View {
             .pickerStyle(.menu)
 
             Toggle("Show PR author avatar", isOn: $settings.showAuthorAvatar)
+            Toggle("Show PR number", isOn: $settings.showPRNumber)
 
             Text("Sort applies to all tabs.")
                 .font(.caption)

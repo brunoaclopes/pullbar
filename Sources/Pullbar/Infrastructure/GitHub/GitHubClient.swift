@@ -66,6 +66,7 @@ struct GitHubClient {
                   ... on PullRequest {
                     id
                     number
+                                        isDraft
                     title
                     url
                                         additions
@@ -120,6 +121,7 @@ struct GitHubClient {
             return PullRequestItem(
                 id: node.id,
                 number: node.number,
+                isDraft: node.isDraft,
                 repository: node.repository.nameWithOwner,
                 title: node.title,
                 author: node.author?.login ?? "unknown",
@@ -511,6 +513,7 @@ private struct GraphQLResponse: Decodable {
     struct PullRequestNode: Decodable {
         let id: String
         let number: Int
+        let isDraft: Bool
         let title: String
         let url: String
         let additions: Int

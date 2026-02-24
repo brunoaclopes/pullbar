@@ -16,7 +16,7 @@ final class AppContext {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private enum Layout {
-        static let popoverSize = NSSize(width: 560, height: 640)
+        static let popoverSize = NSSize(width: 620, height: 640)
     }
 
     private var statusItem: NSStatusItem?

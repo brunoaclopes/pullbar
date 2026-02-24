@@ -16,6 +16,65 @@ enum PRSortOrder: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+enum PRTabGrouping: String, CaseIterable, Codable, Identifiable {
+    case none
+    case repository
+    case author
+    case reviewStatus
+    case checksStatus
+    case draft
+    case age
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none:
+            return "None"
+        case .repository:
+            return "Repository"
+        case .author:
+            return "Author"
+        case .reviewStatus:
+            return "Review status"
+        case .checksStatus:
+            return "Checks status"
+        case .draft:
+            return "Draft / Ready"
+        case .age:
+            return "Age"
+        }
+    }
+}
+
+enum PRTabGroupingOrder: String, CaseIterable, Codable, Identifiable {
+    case ascending
+    case descending
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ascending:
+            return "Ascending"
+        case .descending:
+            return "Descending"
+        }
+    }
+}
+
+struct PRTabGroupLevel: Identifiable, Codable, Hashable {
+    var id: String
+    var grouping: PRTabGrouping
+    var order: PRTabGroupingOrder
+
+    init(id: String = UUID().uuidString, grouping: PRTabGrouping, order: PRTabGroupingOrder = .ascending) {
+        self.id = id
+        self.grouping = grouping
+        self.order = order
+    }
+}
+
 enum BuiltinTabKind: String, CaseIterable, Codable {
     case assignedToMe
     case reviewRequested
@@ -52,6 +111,7 @@ struct PRTabConfig: Identifiable, Codable, Hashable {
     let defaultKind: BuiltinTabKind?
     var filterMatchMode: PRTabFilterMatchMode
     var filters: [PRTabFilterRule]
+    var groupLevels: [PRTabGroupLevel]
 
     init(
         id: String,
@@ -60,7 +120,8 @@ struct PRTabConfig: Identifiable, Codable, Hashable {
         isEnabled: Bool,
         defaultKind: BuiltinTabKind?,
         filterMatchMode: PRTabFilterMatchMode = .all,
-        filters: [PRTabFilterRule] = []
+        filters: [PRTabFilterRule] = [],
+        groupLevels: [PRTabGroupLevel] = []
     ) {
         self.id = id
         self.title = title
@@ -69,6 +130,7 @@ struct PRTabConfig: Identifiable, Codable, Hashable {
         self.defaultKind = defaultKind
         self.filterMatchMode = filterMatchMode
         self.filters = filters
+        self.groupLevels = groupLevels
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -79,6 +141,21 @@ struct PRTabConfig: Identifiable, Codable, Hashable {
         case defaultKind
         case filterMatchMode
         case filters
+        case groupLevels
+        case grouping
+        case groupingOrder
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(query, forKey: .query)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encodeIfPresent(defaultKind, forKey: .defaultKind)
+        try container.encode(filterMatchMode, forKey: .filterMatchMode)
+        try container.encode(filters, forKey: .filters)
+        try container.encode(groupLevels, forKey: .groupLevels)
     }
 
     init(from decoder: Decoder) throws {
@@ -90,6 +167,15 @@ struct PRTabConfig: Identifiable, Codable, Hashable {
         defaultKind = try container.decodeIfPresent(BuiltinTabKind.self, forKey: .defaultKind)
         filterMatchMode = try container.decodeIfPresent(PRTabFilterMatchMode.self, forKey: .filterMatchMode) ?? .all
         filters = try container.decodeIfPresent([PRTabFilterRule].self, forKey: .filters) ?? []
+        if let levels = try container.decodeIfPresent([PRTabGroupLevel].self, forKey: .groupLevels) {
+            groupLevels = levels
+        } else if let oldGrouping = try container.decodeIfPresent(PRTabGrouping.self, forKey: .grouping),
+                  oldGrouping != PRTabGrouping.none {
+            let oldOrder = try container.decodeIfPresent(PRTabGroupingOrder.self, forKey: .groupingOrder) ?? .ascending
+            groupLevels = [PRTabGroupLevel(grouping: oldGrouping, order: oldOrder)]
+        } else {
+            groupLevels = []
+        }
     }
 
     var isDefault: Bool {

@@ -208,31 +208,11 @@ struct ContentView: View {
         } else if selectedTabItems.isEmpty {
             emptyTabState
         } else {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(0.035))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                    )
-
-                List(selectedTabItems) { pr in
-                    PullRequestRow(pr: pr)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
-                .padding(.vertical, 8)
-                .id(selectedTabId)
-                .transition(.asymmetric(
-                    insertion: .move(edge: tabTransitionDirection).combined(with: .opacity),
-                    removal: .move(edge: tabTransitionDirection == .trailing ? .leading : .trailing).combined(with: .opacity)
-                ))
+            if selectedTabGroupLevels.isEmpty {
+                ungroupedListView
+            } else {
+                groupedListView
             }
-            .animation(.easeInOut(duration: 0.22), value: selectedTabId)
-            .listStyle(.plain)
         }
 
         footer
@@ -317,6 +297,127 @@ struct ContentView: View {
         store.byTabId[selectedTabId] ?? []
     }
 
+    private var selectedTabConfig: PRTabConfig? {
+        settings.activeTabs.first(where: { $0.id == selectedTabId })
+    }
+
+    private var selectedTabGroupLevels: [PRTabGroupLevel] {
+        selectedTabConfig?.groupLevels ?? []
+    }
+
+    private var groupedSelectedTabItems: [PullRequestGroupSection] {
+        let levels = selectedTabGroupLevels
+        guard !levels.isEmpty else { return [] }
+        return makeGroups(items: selectedTabItems, levels: levels)
+    }
+
+    private func makeGroups(items: [PullRequestItem], levels: [PRTabGroupLevel]) -> [PullRequestGroupSection] {
+        guard let level = levels.first else { return [] }
+        let remaining = Array(levels.dropFirst())
+        let groups = Dictionary(grouping: items) { groupKey($0, by: level.grouping) }
+        let sortedKeys = sortGroupKeys(Array(groups.keys), grouping: level.grouping, order: level.order)
+        return sortedKeys.compactMap { key in
+            guard let groupItems = groups[key] else { return nil }
+            if remaining.isEmpty {
+                return PullRequestGroupSection(key: key, items: groupItems, subgroups: [])
+            } else {
+                return PullRequestGroupSection(key: key, items: [], subgroups: makeGroups(items: groupItems, levels: remaining))
+            }
+        }
+    }
+
+    private func groupKey(_ pr: PullRequestItem, by grouping: PRTabGrouping) -> String {
+        switch grouping {
+        case .none:        return ""
+        case .repository:  return pr.repository
+        case .author:      return pr.author
+        case .reviewStatus: return pr.reviewSummary.text
+        case .checksStatus: return pr.checkSummary.text
+        case .draft:       return pr.isDraft ? "Draft" : "Ready"
+        case .age:         return ageGroup(for: pr.updatedAt)
+        }
+    }
+
+    private func ageGroup(for date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        if let weekAgo = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)),
+           date >= weekAgo { return "This week" }
+        if let monthAgo = calendar.date(byAdding: .month, value: -1, to: now),
+           date >= monthAgo { return "This month" }
+        return "Older"
+    }
+
+    private func sortGroupKeys(_ keys: [String], grouping: PRTabGrouping, order: PRTabGroupingOrder) -> [String] {
+        switch grouping {
+        case .none:
+            return keys
+        case .repository, .author:
+            return keys.sorted {
+                let cmp = $0.localizedCaseInsensitiveCompare($1)
+                return order == .ascending ? cmp == .orderedAscending : cmp == .orderedDescending
+            }
+        case .reviewStatus:
+            let p = ["Approved": 0, "Changes requested": 1, "Review required": 2, "No review": 3]
+            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+        case .checksStatus:
+            let p = ["Checks passing": 0, "Checks pending": 1, "Checks failing": 2, "No checks": 3]
+            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+        case .draft:
+            let p = ["Ready": 0, "Draft": 1]
+            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+        case .age:
+            let p = ["Today": 0, "Yesterday": 1, "This week": 2, "This month": 3, "Older": 4]
+            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+        }
+    }
+
+    private var ungroupedListView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(0.035))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+
+            List(selectedTabItems) { pr in
+                PullRequestRow(pr: pr)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
+            .padding(.vertical, 8)
+            .id(selectedTabId)
+            .transition(.asymmetric(
+                insertion: .move(edge: tabTransitionDirection).combined(with: .opacity),
+                removal: .move(edge: tabTransitionDirection == .trailing ? .leading : .trailing).combined(with: .opacity)
+            ))
+        }
+        .animation(.easeInOut(duration: 0.22), value: selectedTabId)
+        .listStyle(.plain)
+    }
+
+    private var groupedListView: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(groupedSelectedTabItems) { group in
+                    PullRequestGroupCard(group: group)
+                }
+            }
+        }
+        .id(selectedTabId)
+        .transition(.asymmetric(
+            insertion: .move(edge: tabTransitionDirection).combined(with: .opacity),
+            removal: .move(edge: tabTransitionDirection == .trailing ? .leading : .trailing).combined(with: .opacity)
+        ))
+        .animation(.easeInOut(duration: 0.22), value: selectedTabId)
+    }
+
     private func ensureSelectedTab() {
         let activeTabs = settings.activeTabs
         guard !activeTabs.isEmpty else {
@@ -343,11 +444,134 @@ struct ContentView: View {
     }
 }
 
+private struct PullRequestGroupSection: Identifiable {
+    let key: String
+    let items: [PullRequestItem]
+    let subgroups: [PullRequestGroupSection]
+
+    var id: String { key }
+
+    var totalCount: Int {
+        subgroups.isEmpty ? items.count : subgroups.reduce(0) { $0 + $1.totalCount }
+    }
+}
+
+private struct PullRequestGroupCard: View {
+    let group: PullRequestGroupSection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text(group.key)
+                    .font(.headline)
+
+                Text("\(group.totalCount)")
+                    .font(.caption)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.primary.opacity(0.12))
+                    .clipShape(Capsule())
+
+                Spacer()
+            }
+
+            if group.subgroups.isEmpty {
+                LazyVStack(spacing: 6) {
+                    ForEach(group.items) { pr in
+                        PullRequestRow(pr: pr)
+                    }
+                }
+            } else {
+                PullRequestSubGroupView(subgroups: group.subgroups)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.primary.opacity(0.035))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct PullRequestSubGroupView: View {
+    let subgroups: [PullRequestGroupSection]
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(subgroups) { sub in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Text(sub.key)
+                            .font(.subheadline.weight(.semibold))
+
+                        Text("\(sub.totalCount)")
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.primary.opacity(0.1))
+                            .clipShape(Capsule())
+
+                        Spacer()
+                    }
+
+                    if sub.subgroups.isEmpty {
+                        LazyVStack(spacing: 6) {
+                            ForEach(sub.items) { pr in
+                                PullRequestRow(pr: pr, nesting: 1)
+                            }
+                        }
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            ForEach(sub.subgroups) { leaf in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                            .fill(Color.primary.opacity(0.2))
+                                            .frame(width: 3, height: 12)
+                                        Text(leaf.key)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                        Text("\(leaf.totalCount)")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(Color.primary.opacity(0.07))
+                                            .clipShape(Capsule())
+                                            .foregroundStyle(.secondary)
+                                        Spacer()
+                                    }
+                                    LazyVStack(spacing: 6) {
+                                        ForEach(leaf.items) { pr in
+                                            PullRequestRow(pr: pr, nesting: 2)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.primary.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+        }
+    }
+}
+
 private struct PullRequestRow: View {
     @EnvironmentObject private var settings: SettingsStore
     @EnvironmentObject private var store: PullRequestStore
 
     let pr: PullRequestItem
+    var nesting: Int = 0
     @State private var isHovering = false
     @State private var isHoveringReviewTag = false
     @State private var isShowingReviewPopover = false
@@ -502,7 +726,7 @@ private struct PullRequestRow: View {
         .padding(.horizontal, 10)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHovering ? Color.primary.opacity(0.08) : Color.primary.opacity(0.03))
+                .fill(Color.primary.opacity(isHovering ? rowHoverFill : rowRestFill))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -522,6 +746,20 @@ private struct PullRequestRow: View {
         }
         .onTapGesture {
             NSWorkspace.shared.open(pr.url)
+        }
+    }
+
+    private var rowRestFill: Double {
+        switch nesting {
+        case 0:  return 0.03
+        default: return 0.07
+        }
+    }
+
+    private var rowHoverFill: Double {
+        switch nesting {
+        case 0:  return 0.08
+        default: return 0.12
         }
     }
 

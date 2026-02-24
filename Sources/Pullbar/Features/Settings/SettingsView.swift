@@ -231,6 +231,8 @@ struct SettingsView: View {
                             .lineLimit(2...4)
                             .textFieldStyle(.roundedBorder)
                     }
+
+                    tabGroupingSection(tab.id)
                 }
             }
 
@@ -273,6 +275,8 @@ struct SettingsView: View {
                             .lineLimit(2...4)
                             .textFieldStyle(.roundedBorder)
                     }
+
+                    tabGroupingSection(tab.id)
 
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -789,6 +793,117 @@ struct SettingsView: View {
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func tabGroupingSection(_ tabId: String) -> some View {
+        let levels = settings.tabs.first(where: { $0.id == tabId })?.groupLevels ?? []
+        let usedGroupings = Set(levels.map(\.grouping))
+
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Grouping")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(Array(levels.enumerated()), id: \.element.id) { (index, level) in
+                let priorGroupings = Set(levels.prefix(index).map(\.grouping))
+
+                HStack(spacing: 8) {
+                    if index > 0 {
+                        Text("then")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Picker("Group by", selection: groupLevelGroupingBinding(tabId, level.id)) {
+                        ForEach(PRTabGrouping.allCases.filter {
+                            $0 != PRTabGrouping.none && ($0 == level.grouping || !priorGroupings.contains($0))
+                        }) { grouping in
+                            Text(grouping.title).tag(grouping)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+
+                    Picker("Order", selection: groupLevelOrderBinding(tabId, level.id)) {
+                        ForEach(PRTabGroupingOrder.allCases) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+
+                    Button(role: .destructive) {
+                        removeGroupLevel(tabId: tabId, levelId: level.id)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.red)
+                }
+            }
+
+            let availableForNew = PRTabGrouping.allCases.filter { $0 != PRTabGrouping.none && !usedGroupings.contains($0) }
+            if levels.count < 3 && !availableForNew.isEmpty {
+                Button {
+                    addGroupLevel(tabId: tabId)
+                } label: {
+                    Label("Add grouping level", systemImage: "plus")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    private func groupLevelGroupingBinding(_ tabId: String, _ levelId: String) -> Binding<PRTabGrouping> {
+        Binding(
+            get: {
+                settings.tabs.first(where: { $0.id == tabId })?
+                    .groupLevels.first(where: { $0.id == levelId })?
+                    .grouping ?? .repository
+            },
+            set: { newValue in
+                guard var tab = settings.tabs.first(where: { $0.id == tabId }),
+                      let index = tab.groupLevels.firstIndex(where: { $0.id == levelId })
+                else { return }
+                tab.groupLevels[index].grouping = newValue
+                settings.updateTab(tab)
+            }
+        )
+    }
+
+    private func groupLevelOrderBinding(_ tabId: String, _ levelId: String) -> Binding<PRTabGroupingOrder> {
+        Binding(
+            get: {
+                settings.tabs.first(where: { $0.id == tabId })?
+                    .groupLevels.first(where: { $0.id == levelId })?
+                    .order ?? .ascending
+            },
+            set: { newValue in
+                guard var tab = settings.tabs.first(where: { $0.id == tabId }),
+                      let index = tab.groupLevels.firstIndex(where: { $0.id == levelId })
+                else { return }
+                tab.groupLevels[index].order = newValue
+                settings.updateTab(tab)
+            }
+        )
+    }
+
+    private func addGroupLevel(tabId: String) {
+        guard var tab = settings.tabs.first(where: { $0.id == tabId }),
+              tab.groupLevels.count < 3
+        else { return }
+        let used = Set(tab.groupLevels.map(\.grouping))
+        let firstUnused = PRTabGrouping.allCases.first { $0 != PRTabGrouping.none && !used.contains($0) } ?? .repository
+        tab.groupLevels.append(PRTabGroupLevel(grouping: firstUnused))
+        settings.updateTab(tab)
+    }
+
+    private func removeGroupLevel(tabId: String, levelId: String) {
+        guard var tab = settings.tabs.first(where: { $0.id == tabId }) else { return }
+        tab.groupLevels.removeAll { $0.id == levelId }
+        settings.updateTab(tab)
     }
 
     private func tabEditorCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {

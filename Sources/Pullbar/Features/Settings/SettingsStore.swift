@@ -133,7 +133,8 @@ final class SettingsStore: ObservableObject {
                 isEnabled: true,
                 defaultKind: nil,
                 filterMatchMode: .all,
-                filters: []
+                filters: [],
+                groupLevels: []
             )
         )
     }
@@ -170,7 +171,8 @@ final class SettingsStore: ObservableObject {
                     isEnabled: existing.isEnabled,
                     defaultKind: kind,
                     filterMatchMode: .all,
-                    filters: []
+                    filters: [],
+                    groupLevels: existing.groupLevels
                 )
             }
 
@@ -181,7 +183,8 @@ final class SettingsStore: ObservableObject {
                 isEnabled: true,
                 defaultKind: kind,
                 filterMatchMode: .all,
-                filters: []
+                filters: [],
+                groupLevels: []
             )
         }
 
@@ -276,7 +279,8 @@ final class SettingsStore: ObservableObject {
                         isEnabled: tab.isEnabled,
                         defaultKind: kind,
                         filterMatchMode: .all,
-                        filters: []
+                        filters: [],
+                        groupLevels: tab.groupLevels
                     )
                 )
                 seenBuiltins.insert(kind)
@@ -294,7 +298,8 @@ final class SettingsStore: ObservableObject {
                     isEnabled: tab.isEnabled,
                     defaultKind: nil,
                     filterMatchMode: tab.filterMatchMode,
-                    filters: sanitizeFilters(tab.filters)
+                    filters: sanitizeFilters(tab.filters),
+                    groupLevels: tab.groupLevels
                 )
             )
             seenIDs.insert(tab.id)
@@ -309,7 +314,8 @@ final class SettingsStore: ObservableObject {
                     isEnabled: true,
                     defaultKind: kind,
                     filterMatchMode: .all,
-                    filters: []
+                    filters: [],
+                    groupLevels: []
                 )
             )
         }

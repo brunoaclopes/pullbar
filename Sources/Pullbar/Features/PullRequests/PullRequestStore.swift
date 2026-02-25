@@ -11,6 +11,7 @@ final class PullRequestStore: ObservableObject {
     private let cache = CacheService()
     private let client = GitHubClient()
     private var autoRefreshTask: Task<Void, Never>?
+    private var activeRefreshTask: Task<Void, Never>?
     private var didLoadCache = false
     private var checksDetailTracker = DetailLoadTracker()
     private var commentsDetailTracker = DetailLoadTracker()
@@ -71,6 +72,17 @@ final class PullRequestStore: ObservableObject {
     func refreshAll(force: Bool, settings: SettingsStore) async {
         guard !isRefreshing || force else { return }
 
+        // Cancel any in-flight refresh to avoid concurrent state mutations.
+        activeRefreshTask?.cancel()
+
+        let task = Task { @MainActor in
+            await self.performRefresh(settings: settings)
+        }
+        activeRefreshTask = task
+        await task.value
+    }
+
+    private func performRefresh(settings: SettingsStore) async {
         isRefreshing = true
         defer { isRefreshing = false }
 

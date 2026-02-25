@@ -56,10 +56,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         syncLaunchAtLoginSetting(context: context)
 
+        context.store.configure(settings: context.settings)
+
         bindStatusItem(context: context)
 
         Task { @MainActor in
-            await context.store.configure(settings: context.settings)
             await context.store.loadCachedIfNeeded()
             await context.store.refreshAll(force: false)
         }
@@ -85,24 +86,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .store(in: &cancellables)
 
         context.settings.$notifyReviewRequests
+            .dropFirst()
             .sink { _ in
                 context.store.updateNotificationHints()
             }
             .store(in: &cancellables)
 
         context.settings.$notifyOpenComments
+            .dropFirst()
             .sink { _ in
                 context.store.updateNotificationHints()
             }
             .store(in: &cancellables)
 
         context.settings.$refreshIntervalSeconds
+            .dropFirst()
             .sink { _ in
                 context.store.restartAutoRefresh()
             }
             .store(in: &cancellables)
 
         context.settings.$prSortOrder
+            .dropFirst()
             .sink { _ in
                 context.store.applySort()
             }
@@ -116,12 +121,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .store(in: &cancellables)
 
         context.settings.$enterpriseHostURL
+            .dropFirst()
             .sink { _ in
                 forceRefresh()
             }
             .store(in: &cancellables)
 
         context.settings.$enterpriseAPIURL
+            .dropFirst()
             .sink { _ in
                 forceRefresh()
             }

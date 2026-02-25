@@ -53,7 +53,7 @@ final class PullRequestStore: ObservableObject {
         }
     }
 
-    func configure(settings: SettingsStore) async {
+    func configure(settings: SettingsStore) {
         self.settings = settings
         restartAutoRefresh()
         updateNotificationHints()
@@ -152,6 +152,7 @@ final class PullRequestStore: ObservableObject {
 
     func restartAutoRefresh() {
         autoRefreshTask?.cancel()
+        guard let settings else { return }
         let interval = max(60, settings.refreshIntervalSeconds)
 
         autoRefreshTask = Task { [weak self] in
@@ -164,6 +165,7 @@ final class PullRequestStore: ObservableObject {
     }
 
     func updateNotificationHints() {
+        guard let settings else { return }
         var count = 0
 
         if settings.notifyReviewRequests {
@@ -186,6 +188,7 @@ final class PullRequestStore: ObservableObject {
     }
 
     func applySort() {
+        guard let settings else { return }
         byTabId = byTabId.mapValues { sortPullRequests($0, order: settings.prSortOrder) }
         if let lastUpdatedAt {
             cache.save(PullRequestCache(updatedAt: lastUpdatedAt, byTabId: byTabId))

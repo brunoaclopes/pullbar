@@ -20,7 +20,10 @@ Pullbar is a native macOS menu bar app (macOS 14+) for tracking GitHub pull requ
   - checks state
 - Sort PRs by updated date or created date
 - Open PR/checks directly from rows
-- Auto-refresh with configurable interval
+- Auto-refresh with human-friendly interval picker
+- Keyboard shortcuts: refresh (⌘R), settings (⌘,), switch tabs (⌘←/→)
+- In-memory avatar caching for snappy scrolling
+- Truncation warning when GitHub's 50-result limit is reached
 - Launch-at-login toggle
 
 ## Quick Start
@@ -66,10 +69,13 @@ Optional app icon: place `Pullbar.icns` at `Assets/AppIcon/Pullbar.icns`.
 
 ## Project Layout
 
-- `Sources/Pullbar/App` — app lifecycle and menu bar popover host
-- `Sources/Pullbar/Domain` — shared models/enums
-- `Sources/Pullbar/Features` — Pull Requests + Settings flows
-- `Sources/Pullbar/Infrastructure` — GitHub client, cache, keychain, gh integration
+- `Sources/Pullbar/App` — app lifecycle, menu bar popover host (`PullbarApp.swift`)
+- `Sources/Pullbar/Domain` — shared models/enums, error helpers, detail-load tracker
+- `Sources/Pullbar/Features/PullRequests` — PR list views, row/card components, detail popovers, data store
+- `Sources/Pullbar/Features/Settings` — settings UI and persistence
+- `Sources/Pullbar/Infrastructure/Cache` — JSON cache service, in-memory async image cache
+- `Sources/Pullbar/Infrastructure/GitHub` — GraphQL client, `gh` CLI importer
+- `Sources/Pullbar/Infrastructure/Security` — Keychain token storage
 - `scripts` — local build/run/install tooling
 - `docs` — architecture and operations references
 

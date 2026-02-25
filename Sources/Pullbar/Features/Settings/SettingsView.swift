@@ -32,7 +32,7 @@ struct SettingsView: View {
                 }
                 sectionCard(
                     "Tabs",
-                    caption: "Enable/disable defaults and add custom tabs (max \(SettingsStore.maxTabs) enabled at once).",
+                    caption: "Each enabled tab uses a GitHub API call per refresh. Up to \(SettingsStore.maxTabs) can be active at once.",
                     trailingCaption: "\(settings.activeTabs.count)/\(SettingsStore.maxTabs) enabled"
                 ) {
                     tabsSection
@@ -63,9 +63,9 @@ struct SettingsView: View {
             switchToSelectedProfileIfNeeded()
         }
         .onChange(of: settings.prSortOrder) { _, _ in
-            store.applySort(settings: settings)
+            store.applySort()
             Task {
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
             }
         }
         .alert(highRateWarningTitle, isPresented: $isShowingHighRateWarning) {
@@ -151,14 +151,26 @@ struct SettingsView: View {
         }
     }
 
+    private static let refreshIntervalOptions: [(label: String, seconds: Int)] = [
+        ("1 min", 60),
+        ("2 min", 120),
+        ("3 min", 180),
+        ("5 min", 300),
+        ("10 min", 600),
+    ]
+
     private var refreshSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Stepper(value: $settings.refreshIntervalSeconds, in: 60...600, step: 10) {
-                Text("Interval: \(settings.refreshIntervalSeconds)s")
+            Picker("Auto-refresh every", selection: $settings.refreshIntervalSeconds) {
+                ForEach(Self.refreshIntervalOptions, id: \.seconds) { option in
+                    Text(option.label).tag(option.seconds)
+                }
             }
+            .pickerStyle(.menu)
+
             Button("Refresh now") {
                 Task {
-                    await store.refreshAll(force: true, settings: settings)
+                    await store.refreshAll(force: true)
                 }
             }
         }
@@ -254,7 +266,7 @@ struct SettingsView: View {
                         Button("Remove", role: .destructive) {
                             settings.removeCustomTab(id: tab.id)
                             Task {
-                                await store.refreshAll(force: true, settings: settings)
+                                await store.refreshAll(force: true)
                             }
                         }
                     }
@@ -428,7 +440,7 @@ struct SettingsView: View {
             defer { isEstimatingApplyCost = false }
 
             do {
-                let assessment = try await store.assessRefreshCost(settings: settings)
+                let assessment = try await store.assessRefreshCost()
                 if assessment.shouldWarn || !broadTabs.isEmpty {
                     let heavyTabs = assessment.tabCosts
                         .filter { $0.cost >= 25 }
@@ -478,7 +490,7 @@ struct SettingsView: View {
 
     private func applyTabChangesNow() {
         Task {
-            await store.refreshAll(force: true, settings: settings)
+            await store.refreshAll(force: true)
         }
     }
 
@@ -533,7 +545,7 @@ struct SettingsView: View {
                 if newValue && !tab.isEnabled && settings.activeTabs.count >= SettingsStore.maxTabs {
                     highRateWarningTitle = "Tab limit reached"
                     highRateWarningCanApply = false
-                    highRateWarningMessage = "You can enable up to \(SettingsStore.maxTabs) tabs at once. Disable another tab first."
+                    highRateWarningMessage = "Up to \(SettingsStore.maxTabs) tabs can be active at once because each one costs a GitHub API call per refresh. Disable another tab first."
                     isShowingHighRateWarning = true
                     return
                 }
@@ -638,7 +650,7 @@ struct SettingsView: View {
             tokenStatus = "Token saved securely in Keychain"
             tokenInput = ""
             Task {
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
             }
         } catch {
             if case KeychainError.emptyToken = error {
@@ -664,20 +676,14 @@ struct SettingsView: View {
 
         Task {
             do {
-                let result = try ghCLIImporter.importActiveAuth()
+                let result = try await ghCLIImporter.importActiveAuth()
                 try applyImportedAuth(result)
 
                 tokenStatus = "Imported from gh CLI for @\(result.login) on \(result.host)"
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
                 refreshGHProfiles()
             } catch {
-                if let localized = error as? LocalizedError,
-                   let message = localized.errorDescription,
-                   !message.isEmpty {
-                    tokenStatus = message
-                } else {
-                    tokenStatus = "Unable to import from gh CLI"
-                }
+                tokenStatus = error.userFacingMessage ?? "Unable to import from gh CLI"
             }
 
             isImportingFromGHCLI = false
@@ -691,7 +697,7 @@ struct SettingsView: View {
     private func refreshGHProfiles() {
         Task {
             do {
-                let profiles = try ghCLIImporter.listProfiles()
+                let profiles = try await ghCLIImporter.listProfiles()
                 ghProfiles = profiles
                 if selectedGHProfileID.isEmpty || !profiles.contains(where: { $0.id == selectedGHProfileID }) {
                     selectedGHProfileID = profiles.first(where: { $0.active })?.id ?? profiles.first?.id ?? ""
@@ -704,13 +710,7 @@ struct SettingsView: View {
             } catch {
                 ghProfiles = []
                 selectedGHProfileID = ""
-                if let localized = error as? LocalizedError,
-                   let message = localized.errorDescription,
-                   !message.isEmpty {
-                    ghProfileStatus = message
-                } else {
-                    ghProfileStatus = "Unable to load gh profiles"
-                }
+                ghProfileStatus = error.userFacingMessage ?? "Unable to load gh profiles"
             }
         }
     }
@@ -727,23 +727,17 @@ struct SettingsView: View {
 
         Task {
             do {
-                try ghCLIImporter.switchActiveProfile(host: profile.host, login: profile.login)
-                let result = try ghCLIImporter.importProfile(host: profile.host, login: profile.login)
+                try await ghCLIImporter.switchActiveProfile(host: profile.host, login: profile.login)
+                let result = try await ghCLIImporter.importProfile(host: profile.host, login: profile.login)
                 try applyImportedAuth(result)
 
                 tokenStatus = "Imported from gh CLI for @\(result.login) on \(result.host)"
                 ghProfileStatus = "Active gh profile: @\(result.login) on \(result.host)"
 
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
                 refreshGHProfiles()
             } catch {
-                if let localized = error as? LocalizedError,
-                   let message = localized.errorDescription,
-                   !message.isEmpty {
-                    ghProfileStatus = message
-                } else {
-                    ghProfileStatus = "Unable to switch gh profile"
-                }
+                ghProfileStatus = error.userFacingMessage ?? "Unable to switch gh profile"
             }
 
             isImportingFromGHCLI = false

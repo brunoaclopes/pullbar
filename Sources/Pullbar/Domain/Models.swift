@@ -285,7 +285,7 @@ struct PRTabFilterRule: Identifiable, Codable, Hashable {
     }
 }
 
-enum ReviewSummary: String, Codable {
+enum ReviewSummary: String, Codable, CaseIterable {
     case approved
     case changesRequested
     case reviewRequired
@@ -302,6 +302,21 @@ enum ReviewSummary: String, Codable {
         case .none:
             return "No review"
         }
+    }
+
+    /// Canonical sort index used for group ordering.
+    var sortIndex: Int {
+        switch self {
+        case .approved:          return 0
+        case .changesRequested:  return 1
+        case .reviewRequired:    return 2
+        case .none:              return 3
+        }
+    }
+
+    /// Map a display text back to its sort index.
+    static func sortIndex(forText text: String) -> Int {
+        allCases.first(where: { $0.text == text })?.sortIndex ?? 99
     }
 }
 
@@ -361,7 +376,7 @@ struct PullRequestReviewActor: Identifiable, Codable, Hashable {
     var id: String { login }
 }
 
-enum CheckSummary: String, Codable {
+enum CheckSummary: String, Codable, CaseIterable {
     case passing
     case failing
     case pending
@@ -378,6 +393,21 @@ enum CheckSummary: String, Codable {
         case .none:
             return "No checks"
         }
+    }
+
+    /// Canonical sort index used for group ordering.
+    var sortIndex: Int {
+        switch self {
+        case .passing:  return 0
+        case .pending:  return 1
+        case .failing:  return 2
+        case .none:     return 3
+        }
+    }
+
+    /// Map a display text back to its sort index.
+    static func sortIndex(forText text: String) -> Int {
+        allCases.first(where: { $0.text == text })?.sortIndex ?? 99
     }
 }
 

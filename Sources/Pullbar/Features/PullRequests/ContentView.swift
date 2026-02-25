@@ -234,11 +234,20 @@ struct ContentView: View {
         footer
     }
 
+    private static let queryResultLimit = 50
+
     private var footer: some View {
         HStack {
             if store.isRefreshing {
                 ProgressView()
                     .controlSize(.small)
+            }
+
+            if selectedTabItems.count >= Self.queryResultLimit {
+                Label("Showing first \(Self.queryResultLimit) results", systemImage: "exclamationmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .help("GitHub returns at most \(Self.queryResultLimit) results per query. Narrow your tab query to see all PRs.")
             }
 
             Spacer()

@@ -32,7 +32,7 @@ struct SettingsView: View {
                 }
                 sectionCard(
                     "Tabs",
-                    caption: "Enable/disable defaults and add custom tabs (max \(SettingsStore.maxTabs) enabled at once).",
+                    caption: "Each enabled tab uses a GitHub API call per refresh. Up to \(SettingsStore.maxTabs) can be active at once.",
                     trailingCaption: "\(settings.activeTabs.count)/\(SettingsStore.maxTabs) enabled"
                 ) {
                     tabsSection
@@ -533,7 +533,7 @@ struct SettingsView: View {
                 if newValue && !tab.isEnabled && settings.activeTabs.count >= SettingsStore.maxTabs {
                     highRateWarningTitle = "Tab limit reached"
                     highRateWarningCanApply = false
-                    highRateWarningMessage = "You can enable up to \(SettingsStore.maxTabs) tabs at once. Disable another tab first."
+                    highRateWarningMessage = "Up to \(SettingsStore.maxTabs) tabs can be active at once because each one costs a GitHub API call per refresh. Disable another tab first."
                     isShowingHighRateWarning = true
                     return
                 }

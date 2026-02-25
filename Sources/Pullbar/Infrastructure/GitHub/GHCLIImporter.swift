@@ -39,7 +39,25 @@ enum GHCLIImportError: LocalizedError {
 }
 
 struct GHCLIImporter {
-    func listProfiles() throws -> [GHCLIProfile] {
+    func listProfiles() async throws -> [GHCLIProfile] {
+        try await runOffMainThread { try self.syncListProfiles() }
+    }
+
+    func switchActiveProfile(host: String, login: String) async throws {
+        try await runOffMainThread { try self.syncSwitchActiveProfile(host: host, login: login) }
+    }
+
+    func importProfile(host: String, login: String) async throws -> GHCLIImportResult {
+        try await runOffMainThread { try self.syncImportProfile(host: host, login: login) }
+    }
+
+    func importActiveAuth() async throws -> GHCLIImportResult {
+        try await runOffMainThread { try self.syncImportActiveAuth() }
+    }
+
+    // MARK: - Synchronous implementations (run on background thread)
+
+    private func syncListProfiles() throws -> [GHCLIProfile] {
         guard commandExists("gh") else {
             throw GHCLIImportError.ghNotInstalled
         }
@@ -64,7 +82,7 @@ struct GHCLIImporter {
         }
     }
 
-    func switchActiveProfile(host: String, login: String) throws {
+    private func syncSwitchActiveProfile(host: String, login: String) throws {
         guard commandExists("gh") else {
             throw GHCLIImportError.ghNotInstalled
         }
@@ -72,7 +90,7 @@ struct GHCLIImporter {
         _ = try runGh(arguments: ["auth", "switch", "--hostname", host, "--user", login])
     }
 
-    func importProfile(host: String, login: String) throws -> GHCLIImportResult {
+    private func syncImportProfile(host: String, login: String) throws -> GHCLIImportResult {
         guard commandExists("gh") else {
             throw GHCLIImportError.ghNotInstalled
         }
@@ -86,7 +104,7 @@ struct GHCLIImporter {
         return GHCLIImportResult(host: host, login: login, token: token)
     }
 
-    func importActiveAuth() throws -> GHCLIImportResult {
+    private func syncImportActiveAuth() throws -> GHCLIImportResult {
         guard commandExists("gh") else {
             throw GHCLIImportError.ghNotInstalled
         }
@@ -94,7 +112,7 @@ struct GHCLIImporter {
         let statusData = try runGh(arguments: ["auth", "status", "--json", "hosts"])
         let parsed = try parseActiveHost(data: statusData)
 
-        return try importProfile(host: parsed.host, login: parsed.login)
+        return try syncImportProfile(host: parsed.host, login: parsed.login)
     }
 
     private func commandExists(_ command: String) -> Bool {
@@ -188,5 +206,19 @@ struct GHCLIImporter {
         }
 
         return parsed
+    }
+
+    /// Run a blocking closure off the cooperative thread pool.
+    private func runOffMainThread<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let result = try work()
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 }

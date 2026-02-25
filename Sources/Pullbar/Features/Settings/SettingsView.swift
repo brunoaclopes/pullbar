@@ -664,7 +664,7 @@ struct SettingsView: View {
 
         Task {
             do {
-                let result = try ghCLIImporter.importActiveAuth()
+                let result = try await ghCLIImporter.importActiveAuth()
                 try applyImportedAuth(result)
 
                 tokenStatus = "Imported from gh CLI for @\(result.login) on \(result.host)"
@@ -685,7 +685,7 @@ struct SettingsView: View {
     private func refreshGHProfiles() {
         Task {
             do {
-                let profiles = try ghCLIImporter.listProfiles()
+                let profiles = try await ghCLIImporter.listProfiles()
                 ghProfiles = profiles
                 if selectedGHProfileID.isEmpty || !profiles.contains(where: { $0.id == selectedGHProfileID }) {
                     selectedGHProfileID = profiles.first(where: { $0.active })?.id ?? profiles.first?.id ?? ""
@@ -715,8 +715,8 @@ struct SettingsView: View {
 
         Task {
             do {
-                try ghCLIImporter.switchActiveProfile(host: profile.host, login: profile.login)
-                let result = try ghCLIImporter.importProfile(host: profile.host, login: profile.login)
+                try await ghCLIImporter.switchActiveProfile(host: profile.host, login: profile.login)
+                let result = try await ghCLIImporter.importProfile(host: profile.host, login: profile.login)
                 try applyImportedAuth(result)
 
                 tokenStatus = "Imported from gh CLI for @\(result.login) on \(result.host)"

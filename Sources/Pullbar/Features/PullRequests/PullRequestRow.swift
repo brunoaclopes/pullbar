@@ -271,7 +271,7 @@ struct PullRequestRow: View {
     private var authorAvatar: some View {
         Group {
             if let avatarURL = pr.authorAvatarURL {
-                AsyncImage(url: avatarURL) { phase in
+                CachedAsyncImage(url: avatarURL) { phase in
                     switch phase {
                     case .success(let image):
                         image

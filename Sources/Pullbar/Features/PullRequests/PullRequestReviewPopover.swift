@@ -90,7 +90,7 @@ struct PullRequestReviewPopover: View {
     private func avatarView(for actor: PullRequestReviewActor, fallbackIcon: String, tint: Color) -> some View {
         Group {
             if let url = actor.avatarURL {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
                         image

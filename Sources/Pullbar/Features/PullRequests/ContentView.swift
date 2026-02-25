@@ -29,6 +29,22 @@ struct ContentView: View {
         .onChange(of: settings.tabs) { _, _ in
             ensureSelectedTab()
         }
+        .keyboardShortcut("r", modifiers: .command)  // Cmd+R: dummy, handled below
+        .background {
+            // Invisible buttons that capture keyboard shortcuts
+            Button("") { Task { await store.refreshAll(force: true) } }
+                .keyboardShortcut("r", modifiers: .command)
+                .hidden()
+            Button("") { isShowingSettings.toggle() }
+                .keyboardShortcut(",", modifiers: .command)
+                .hidden()
+            Button("") { switchTab(direction: -1) }
+                .keyboardShortcut(.leftArrow, modifiers: .command)
+                .hidden()
+            Button("") { switchTab(direction: 1) }
+                .keyboardShortcut(.rightArrow, modifiers: .command)
+                .hidden()
+        }
     }
 
     private var header: some View {
@@ -443,5 +459,20 @@ struct ContentView: View {
         }
 
         tabTransitionDirection = nextIndex > currentIndex ? .trailing : .leading
+    }
+
+    private func switchTab(direction: Int) {
+        let tabs = settings.activeTabs
+        guard !tabs.isEmpty,
+              let currentIndex = tabs.firstIndex(where: { $0.id == selectedTabId })
+        else { return }
+
+        let nextIndex = currentIndex + direction
+        guard tabs.indices.contains(nextIndex) else { return }
+
+        updateTransitionDirection(for: tabs[nextIndex].id)
+        withAnimation(.easeInOut(duration: 0.22)) {
+            selectedTabId = tabs[nextIndex].id
+        }
     }
 }

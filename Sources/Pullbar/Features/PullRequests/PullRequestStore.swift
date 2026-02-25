@@ -16,6 +16,7 @@ final class PullRequestStore: ObservableObject {
     private var checksDetailTracker = DetailLoadTracker()
     private var commentsDetailTracker = DetailLoadTracker()
     private var reviewDetailTracker = DetailLoadTracker()
+    private(set) var settings: SettingsStore!
 
     struct RefreshCostAssessment {
         enum WarningLevel {
@@ -53,8 +54,9 @@ final class PullRequestStore: ObservableObject {
     }
 
     func configure(settings: SettingsStore) async {
-        restartAutoRefresh(settings: settings)
-        updateNotificationHints(settings: settings)
+        self.settings = settings
+        restartAutoRefresh()
+        updateNotificationHints()
     }
 
     func loadCachedIfNeeded() async {
@@ -69,20 +71,20 @@ final class PullRequestStore: ObservableObject {
         }
     }
 
-    func refreshAll(force: Bool, settings: SettingsStore) async {
+    func refreshAll(force: Bool) async {
         guard !isRefreshing || force else { return }
 
         // Cancel any in-flight refresh to avoid concurrent state mutations.
         activeRefreshTask?.cancel()
 
         let task = Task { @MainActor in
-            await self.performRefresh(settings: settings)
+            await self.performRefresh()
         }
         activeRefreshTask = task
         await task.value
     }
 
-    private func performRefresh(settings: SettingsStore) async {
+    private func performRefresh() async {
         isRefreshing = true
         defer { isRefreshing = false }
 
@@ -139,7 +141,7 @@ final class PullRequestStore: ObservableObject {
             resetLoadedDetailState()
         }
 
-        updateNotificationHints(settings: settings)
+        updateNotificationHints()
 
         if errors.isEmpty {
             lastErrorMessage = nil
@@ -148,7 +150,7 @@ final class PullRequestStore: ObservableObject {
         }
     }
 
-    func restartAutoRefresh(settings: SettingsStore) {
+    func restartAutoRefresh() {
         autoRefreshTask?.cancel()
         let interval = max(60, settings.refreshIntervalSeconds)
 
@@ -156,12 +158,12 @@ final class PullRequestStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
                 guard !Task.isCancelled else { return }
-                await self?.refreshAll(force: false, settings: settings)
+                await self?.refreshAll(force: false)
             }
         }
     }
 
-    func updateNotificationHints(settings: SettingsStore) {
+    func updateNotificationHints() {
         var count = 0
 
         if settings.notifyReviewRequests {
@@ -183,14 +185,14 @@ final class PullRequestStore: ObservableObject {
         notificationHintCount = count
     }
 
-    func applySort(settings: SettingsStore) {
+    func applySort() {
         byTabId = byTabId.mapValues { sortPullRequests($0, order: settings.prSortOrder) }
         if let lastUpdatedAt {
             cache.save(PullRequestCache(updatedAt: lastUpdatedAt, byTabId: byTabId))
         }
     }
 
-    func assessRefreshCost(settings: SettingsStore) async throws -> RefreshCostAssessment {
+    func assessRefreshCost() async throws -> RefreshCostAssessment {
         let tabsToEvaluate = settings.activeTabs.filter { !$0.isDefault }
         guard !tabsToEvaluate.isEmpty else {
             return RefreshCostAssessment(totalCost: 0, remaining: 0, limit: 0, tabCosts: [])
@@ -223,7 +225,7 @@ final class PullRequestStore: ObservableObject {
         )
     }
 
-    func ensureChecksDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
+    func ensureChecksDetailsLoaded(for pr: PullRequestItem) async {
         guard checksDetailTracker.shouldLoad(pr.id) else { return }
 
         checksDetailTracker.beginLoading(pr.id)
@@ -246,7 +248,7 @@ final class PullRequestStore: ObservableObject {
         }
     }
 
-    func ensureCommentDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
+    func ensureCommentDetailsLoaded(for pr: PullRequestItem) async {
         guard commentsDetailTracker.shouldLoad(pr.id) else { return }
 
         commentsDetailTracker.beginLoading(pr.id)
@@ -272,13 +274,13 @@ final class PullRequestStore: ObservableObject {
                     reviewThreadsTotal: threads.count
                 )
             }
-            updateNotificationHints(settings: settings)
+            updateNotificationHints()
         } catch {
             lastErrorMessage = error.userFacingMessage ?? lastErrorMessage
         }
     }
 
-    func ensureReviewDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
+    func ensureReviewDetailsLoaded(for pr: PullRequestItem) async {
         guard reviewDetailTracker.shouldLoad(pr.id) else { return }
 
         reviewDetailTracker.beginLoading(pr.id)

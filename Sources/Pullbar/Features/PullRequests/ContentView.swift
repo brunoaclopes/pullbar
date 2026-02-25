@@ -42,7 +42,7 @@ struct ContentView: View {
             if !isShowingSettings {
                 Button {
                     Task {
-                        await store.refreshAll(force: true, settings: settings)
+                        await store.refreshAll(force: true)
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
@@ -175,7 +175,7 @@ struct ContentView: View {
                         }
                         setupMessage = ""
                         Task {
-                            await store.refreshAll(force: true, settings: settings)
+                            await store.refreshAll(force: true)
                         }
                     }
                     .buttonStyle(.bordered)
@@ -200,7 +200,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                 Button("Retry") {
                     Task {
-                        await store.refreshAll(force: true, settings: settings)
+                        await store.refreshAll(force: true)
                     }
                 }
             }
@@ -261,7 +261,7 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     Button("Refresh") {
                         Task {
-                            await store.refreshAll(force: true, settings: settings)
+                            await store.refreshAll(force: true)
                         }
                     }
                     .buttonStyle(.borderedProminent)

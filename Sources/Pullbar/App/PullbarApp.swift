@@ -61,14 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         Task { @MainActor in
             await context.store.configure(settings: context.settings)
             await context.store.loadCachedIfNeeded()
-            await context.store.refreshAll(force: false, settings: context.settings)
+            await context.store.refreshAll(force: false)
         }
     }
 
     private func bindStatusItem(context: AppContext) {
         let forceRefresh: () -> Void = {
             Task { @MainActor in
-                await context.store.refreshAll(force: true, settings: context.settings)
+                await context.store.refreshAll(force: true)
             }
         }
 
@@ -86,25 +86,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         context.settings.$notifyReviewRequests
             .sink { _ in
-                context.store.updateNotificationHints(settings: context.settings)
+                context.store.updateNotificationHints()
             }
             .store(in: &cancellables)
 
         context.settings.$notifyOpenComments
             .sink { _ in
-                context.store.updateNotificationHints(settings: context.settings)
+                context.store.updateNotificationHints()
             }
             .store(in: &cancellables)
 
         context.settings.$refreshIntervalSeconds
             .sink { _ in
-                context.store.restartAutoRefresh(settings: context.settings)
+                context.store.restartAutoRefresh()
             }
             .store(in: &cancellables)
 
         context.settings.$prSortOrder
             .sink { _ in
-                context.store.applySort(settings: context.settings)
+                context.store.applySort()
             }
             .store(in: &cancellables)
 

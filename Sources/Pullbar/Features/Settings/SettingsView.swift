@@ -63,9 +63,9 @@ struct SettingsView: View {
             switchToSelectedProfileIfNeeded()
         }
         .onChange(of: settings.prSortOrder) { _, _ in
-            store.applySort(settings: settings)
+            store.applySort()
             Task {
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
             }
         }
         .alert(highRateWarningTitle, isPresented: $isShowingHighRateWarning) {
@@ -158,7 +158,7 @@ struct SettingsView: View {
             }
             Button("Refresh now") {
                 Task {
-                    await store.refreshAll(force: true, settings: settings)
+                    await store.refreshAll(force: true)
                 }
             }
         }
@@ -254,7 +254,7 @@ struct SettingsView: View {
                         Button("Remove", role: .destructive) {
                             settings.removeCustomTab(id: tab.id)
                             Task {
-                                await store.refreshAll(force: true, settings: settings)
+                                await store.refreshAll(force: true)
                             }
                         }
                     }
@@ -428,7 +428,7 @@ struct SettingsView: View {
             defer { isEstimatingApplyCost = false }
 
             do {
-                let assessment = try await store.assessRefreshCost(settings: settings)
+                let assessment = try await store.assessRefreshCost()
                 if assessment.shouldWarn || !broadTabs.isEmpty {
                     let heavyTabs = assessment.tabCosts
                         .filter { $0.cost >= 25 }
@@ -478,7 +478,7 @@ struct SettingsView: View {
 
     private func applyTabChangesNow() {
         Task {
-            await store.refreshAll(force: true, settings: settings)
+            await store.refreshAll(force: true)
         }
     }
 
@@ -638,7 +638,7 @@ struct SettingsView: View {
             tokenStatus = "Token saved securely in Keychain"
             tokenInput = ""
             Task {
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
             }
         } catch {
             if case KeychainError.emptyToken = error {
@@ -668,7 +668,7 @@ struct SettingsView: View {
                 try applyImportedAuth(result)
 
                 tokenStatus = "Imported from gh CLI for @\(result.login) on \(result.host)"
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
                 refreshGHProfiles()
             } catch {
                 tokenStatus = error.userFacingMessage ?? "Unable to import from gh CLI"
@@ -722,7 +722,7 @@ struct SettingsView: View {
                 tokenStatus = "Imported from gh CLI for @\(result.login) on \(result.host)"
                 ghProfileStatus = "Active gh profile: @\(result.login) on \(result.host)"
 
-                await store.refreshAll(force: true, settings: settings)
+                await store.refreshAll(force: true)
                 refreshGHProfiles()
             } catch {
                 ghProfileStatus = error.userFacingMessage ?? "Unable to switch gh profile"

@@ -69,7 +69,7 @@ struct PullRequestRow: View {
                             isShowingReviewPopover = false
                         } else {
                             Task {
-                                await store.ensureReviewDetailsLoaded(for: pr, settings: settings)
+                                await store.ensureReviewDetailsLoaded(for: pr)
                                 isShowingReviewPopover = true
                             }
                         }
@@ -95,7 +95,7 @@ struct PullRequestRow: View {
                             isShowingChecksPopover = false
                         } else {
                             Task {
-                                await store.ensureChecksDetailsLoaded(for: pr, settings: settings)
+                                await store.ensureChecksDetailsLoaded(for: pr)
                                 isShowingChecksPopover = true
                             }
                         }
@@ -121,7 +121,7 @@ struct PullRequestRow: View {
                                 isShowingCommentsPopover = false
                             } else {
                                 Task {
-                                    await store.ensureCommentDetailsLoaded(for: pr, settings: settings)
+                                    await store.ensureCommentDetailsLoaded(for: pr)
                                     isShowingCommentsPopover = true
                                 }
                             }

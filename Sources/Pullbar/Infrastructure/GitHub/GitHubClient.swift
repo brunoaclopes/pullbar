@@ -498,10 +498,7 @@ private struct PullRequestQueryCostData: Decodable {
     }
 }
 
-private struct GraphQLResponse: Decodable {
-    let data: DataContainer?
-    let errors: [GraphQLError]?
-
+private enum GraphQLResponse {
     struct DataContainer: Decodable {
         let search: SearchResult
     }
@@ -559,10 +556,6 @@ private struct GraphQLResponse: Decodable {
                 let isResolved: Bool
             }
         }
-    }
-
-    struct GraphQLError: Decodable {
-        let message: String
     }
 }
 

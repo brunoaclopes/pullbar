@@ -151,11 +151,23 @@ struct SettingsView: View {
         }
     }
 
+    private static let refreshIntervalOptions: [(label: String, seconds: Int)] = [
+        ("1 min", 60),
+        ("2 min", 120),
+        ("3 min", 180),
+        ("5 min", 300),
+        ("10 min", 600),
+    ]
+
     private var refreshSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Stepper(value: $settings.refreshIntervalSeconds, in: 60...600, step: 10) {
-                Text("Interval: \(settings.refreshIntervalSeconds)s")
+            Picker("Auto-refresh every", selection: $settings.refreshIntervalSeconds) {
+                ForEach(Self.refreshIntervalOptions, id: \.seconds) { option in
+                    Text(option.label).tag(option.seconds)
+                }
             }
+            .pickerStyle(.menu)
+
             Button("Refresh now") {
                 Task {
                     await store.refreshAll(force: true)

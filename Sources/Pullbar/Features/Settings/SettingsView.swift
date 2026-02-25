@@ -671,13 +671,7 @@ struct SettingsView: View {
                 await store.refreshAll(force: true, settings: settings)
                 refreshGHProfiles()
             } catch {
-                if let localized = error as? LocalizedError,
-                   let message = localized.errorDescription,
-                   !message.isEmpty {
-                    tokenStatus = message
-                } else {
-                    tokenStatus = "Unable to import from gh CLI"
-                }
+                tokenStatus = error.userFacingMessage ?? "Unable to import from gh CLI"
             }
 
             isImportingFromGHCLI = false
@@ -704,13 +698,7 @@ struct SettingsView: View {
             } catch {
                 ghProfiles = []
                 selectedGHProfileID = ""
-                if let localized = error as? LocalizedError,
-                   let message = localized.errorDescription,
-                   !message.isEmpty {
-                    ghProfileStatus = message
-                } else {
-                    ghProfileStatus = "Unable to load gh profiles"
-                }
+                ghProfileStatus = error.userFacingMessage ?? "Unable to load gh profiles"
             }
         }
     }
@@ -737,13 +725,7 @@ struct SettingsView: View {
                 await store.refreshAll(force: true, settings: settings)
                 refreshGHProfiles()
             } catch {
-                if let localized = error as? LocalizedError,
-                   let message = localized.errorDescription,
-                   !message.isEmpty {
-                    ghProfileStatus = message
-                } else {
-                    ghProfileStatus = "Unable to switch gh profile"
-                }
+                ghProfileStatus = error.userFacingMessage ?? "Unable to switch gh profile"
             }
 
             isImportingFromGHCLI = false

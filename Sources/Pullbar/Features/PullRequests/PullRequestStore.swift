@@ -93,13 +93,7 @@ final class PullRequestStore: ObservableObject {
         do {
             authToken = try client.resolveToken()
         } catch {
-            if let localized = error as? LocalizedError,
-               let message = localized.errorDescription,
-               !message.isEmpty {
-                lastErrorMessage = message
-            } else {
-                lastErrorMessage = "GitHub token is missing. Add a Personal Access Token in Settings."
-            }
+            lastErrorMessage = error.userFacingMessage ?? "GitHub token is missing. Add a Personal Access Token in Settings."
             return
         }
 
@@ -124,13 +118,7 @@ final class PullRequestStore: ObservableObject {
                     updated[tab.id] = sortPullRequests(filtered, order: settings.prSortOrder)
                     successCount += 1
                 case .failure(let error):
-                    if let localized = error as? LocalizedError,
-                       let message = localized.errorDescription,
-                       !message.isEmpty {
-                        errors.append("\(tab.title): \(message)")
-                    } else {
-                        errors.append("\(tab.title): Unable to refresh pull requests.")
-                    }
+                    errors.append("\(tab.title): \(error.userFacingMessage ?? "Unable to refresh pull requests.")")
                 }
             }
         }
@@ -247,11 +235,7 @@ final class PullRequestStore: ObservableObject {
                 current.updating(checks: checks)
             }
         } catch {
-            if let localized = error as? LocalizedError,
-               let message = localized.errorDescription,
-               !message.isEmpty {
-                lastErrorMessage = message
-            }
+            lastErrorMessage = error.userFacingMessage ?? lastErrorMessage
         }
     }
 
@@ -285,11 +269,7 @@ final class PullRequestStore: ObservableObject {
             }
             updateNotificationHints(settings: settings)
         } catch {
-            if let localized = error as? LocalizedError,
-               let message = localized.errorDescription,
-               !message.isEmpty {
-                lastErrorMessage = message
-            }
+            lastErrorMessage = error.userFacingMessage ?? lastErrorMessage
         }
     }
 
@@ -314,11 +294,7 @@ final class PullRequestStore: ObservableObject {
                 current.updating(reviewDetails: details)
             }
         } catch {
-            if let localized = error as? LocalizedError,
-               let message = localized.errorDescription,
-               !message.isEmpty {
-                lastErrorMessage = message
-            }
+            lastErrorMessage = error.userFacingMessage ?? lastErrorMessage
         }
     }
 

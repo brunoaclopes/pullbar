@@ -12,12 +12,9 @@ final class PullRequestStore: ObservableObject {
     private let client = GitHubClient()
     private var autoRefreshTask: Task<Void, Never>?
     private var didLoadCache = false
-    private var loadedChecksDetailPRIds: Set<String> = []
-    private var loadedCommentsDetailPRIds: Set<String> = []
-    private var loadedReviewDetailPRIds: Set<String> = []
-    private var loadingChecksDetailPRIds: Set<String> = []
-    private var loadingCommentsDetailPRIds: Set<String> = []
-    private var loadingReviewDetailPRIds: Set<String> = []
+    private var checksDetailTracker = DetailLoadTracker()
+    private var commentsDetailTracker = DetailLoadTracker()
+    private var reviewDetailTracker = DetailLoadTracker()
 
     struct RefreshCostAssessment {
         enum WarningLevel {
@@ -215,12 +212,10 @@ final class PullRequestStore: ObservableObject {
     }
 
     func ensureChecksDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
-        guard !loadedChecksDetailPRIds.contains(pr.id), !loadingChecksDetailPRIds.contains(pr.id) else {
-            return
-        }
+        guard checksDetailTracker.shouldLoad(pr.id) else { return }
 
-        loadingChecksDetailPRIds.insert(pr.id)
-        defer { loadingChecksDetailPRIds.remove(pr.id) }
+        checksDetailTracker.beginLoading(pr.id)
+        defer { checksDetailTracker.endLoading(pr.id) }
 
         do {
             let token = try client.resolveToken()
@@ -230,7 +225,7 @@ final class PullRequestStore: ObservableObject {
                 token: token
             )
 
-            loadedChecksDetailPRIds.insert(pr.id)
+            checksDetailTracker.markLoaded(pr.id)
             replacePullRequest(id: pr.id) { current in
                 current.updating(checks: checks)
             }
@@ -240,12 +235,10 @@ final class PullRequestStore: ObservableObject {
     }
 
     func ensureCommentDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
-        guard !loadedCommentsDetailPRIds.contains(pr.id), !loadingCommentsDetailPRIds.contains(pr.id) else {
-            return
-        }
+        guard commentsDetailTracker.shouldLoad(pr.id) else { return }
 
-        loadingCommentsDetailPRIds.insert(pr.id)
-        defer { loadingCommentsDetailPRIds.remove(pr.id) }
+        commentsDetailTracker.beginLoading(pr.id)
+        defer { commentsDetailTracker.endLoading(pr.id) }
 
         do {
             let token = try client.resolveToken()
@@ -259,7 +252,7 @@ final class PullRequestStore: ObservableObject {
                 count + (thread.status == .unresolved ? 1 : 0)
             }
 
-            loadedCommentsDetailPRIds.insert(pr.id)
+            commentsDetailTracker.markLoaded(pr.id)
             replacePullRequest(id: pr.id) { current in
                 current.updating(
                     commentThreads: threads,
@@ -274,12 +267,10 @@ final class PullRequestStore: ObservableObject {
     }
 
     func ensureReviewDetailsLoaded(for pr: PullRequestItem, settings: SettingsStore) async {
-        guard !loadedReviewDetailPRIds.contains(pr.id), !loadingReviewDetailPRIds.contains(pr.id) else {
-            return
-        }
+        guard reviewDetailTracker.shouldLoad(pr.id) else { return }
 
-        loadingReviewDetailPRIds.insert(pr.id)
-        defer { loadingReviewDetailPRIds.remove(pr.id) }
+        reviewDetailTracker.beginLoading(pr.id)
+        defer { reviewDetailTracker.endLoading(pr.id) }
 
         do {
             let token = try client.resolveToken()
@@ -289,7 +280,7 @@ final class PullRequestStore: ObservableObject {
                 token: token
             )
 
-            loadedReviewDetailPRIds.insert(pr.id)
+            reviewDetailTracker.markLoaded(pr.id)
             replacePullRequest(id: pr.id) { current in
                 current.updating(reviewDetails: details)
             }
@@ -342,12 +333,9 @@ final class PullRequestStore: ObservableObject {
     }
 
     private func resetLoadedDetailState() {
-        loadedChecksDetailPRIds.removeAll()
-        loadedCommentsDetailPRIds.removeAll()
-        loadedReviewDetailPRIds.removeAll()
-        loadingChecksDetailPRIds.removeAll()
-        loadingCommentsDetailPRIds.removeAll()
-        loadingReviewDetailPRIds.removeAll()
+        checksDetailTracker = DetailLoadTracker()
+        commentsDetailTracker = DetailLoadTracker()
+        reviewDetailTracker = DetailLoadTracker()
     }
 
     private func matchesFilter(pr: PullRequestItem, filter: PRTabFilterRule) -> Bool {

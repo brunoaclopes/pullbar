@@ -360,18 +360,20 @@ struct ContentView: View {
                 return order == .ascending ? cmp == .orderedAscending : cmp == .orderedDescending
             }
         case .reviewStatus:
-            let p = ["Approved": 0, "Changes requested": 1, "Review required": 2, "No review": 3]
-            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+            return sortByIndex(keys, order: order) { ReviewSummary.sortIndex(forText: $0) }
         case .checksStatus:
-            let p = ["Checks passing": 0, "Checks pending": 1, "Checks failing": 2, "No checks": 3]
-            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+            return sortByIndex(keys, order: order) { CheckSummary.sortIndex(forText: $0) }
         case .draft:
-            let p = ["Ready": 0, "Draft": 1]
-            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+            let priorities = ["Ready": 0, "Draft": 1]
+            return sortByIndex(keys, order: order) { priorities[$0] ?? 99 }
         case .age:
-            let p = ["Today": 0, "Yesterday": 1, "This week": 2, "This month": 3, "Older": 4]
-            return keys.sorted { (p[$0] ?? 99) < (p[$1] ?? 99) ? order == .ascending : order == .descending }
+            let priorities = ["Today": 0, "Yesterday": 1, "This week": 2, "This month": 3, "Older": 4]
+            return sortByIndex(keys, order: order) { priorities[$0] ?? 99 }
         }
+    }
+
+    private func sortByIndex(_ keys: [String], order: PRTabGroupingOrder, index: (String) -> Int) -> [String] {
+        keys.sorted { order == .ascending ? index($0) < index($1) : index($0) > index($1) }
     }
 
     private var ungroupedListView: some View {
